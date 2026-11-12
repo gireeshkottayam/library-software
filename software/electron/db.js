@@ -35,32 +35,200 @@ if (!fs.existsSync(dbPath)) {
   }
 }
 
-const db = new Database(dbPath)
+// The connection is `let` because a restore closes it, puts another database
+// in its place and opens a new one.
+let db = new Database(dbPath)
 
 module.exports.getDbPath = () => dbPath
 
 const backupDir = path.join(persistentDbDir, 'backups')
 if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true })
 module.exports.getBackupPath = () => backupDir
+module.exports.createBackupFile = createBackupFile
+module.exports.restoreFromFile = restoreFromFile
+/**
+ * The newest automatic backup file.
+ *
+ * @returns {string|null} the full path, or null when there is no backup yet
+ */
+module.exports.getLatestBackupFile = () => {
+  try {
+    const files = fs.readdirSync(backupDir)
+      .filter(name => name.startsWith('library_backup_') && name.endsWith('.db'))
+      .map(name => path.join(backupDir, name))
+      .map(file => ({ file, time: fs.statSync(file).mtimeMs }))
+      .sort((a, b) => b.time - a.time)
+    return files.length ? files[0].file : null
+  } catch (err) {
+    console.error('Reading the backup folder failed:', err)
+    return null
+  }
+}
+/**
+ * Close the database connection.
+ *
+ * Closing checkpoints the write-ahead log into the database file, so the
+ * database on disk is complete. Used when the app quits and by the tests.
+ */
+module.exports.closeDatabase = () => {
+  try { db.close() } catch (e) {}
+}
+
+/**
+ * Write every pending change of the write-ahead log into the database file.
+ *
+ * The database runs in WAL mode, so a plain copy of `library.db` can be
+ * missing the changes that are still in `library.db-wal`. Every backup
+ * checkpoints first, so a backup always holds the complete data.
+ */
+function checkpointWal() {
+  try {
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+  } catch (err) {
+    console.error('WAL checkpoint failed:', err)
+  }
+}
 
 function performAutoBackup() {
   try {
+    checkpointWal()
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
     const bFile = path.join(backupDir, `library_backup_${timestamp}.db`)
-    // SQLite might be in WAL mode, but file copy is generally safe for better-sqlite3
-    // because we are in the same process and not doing high concurrency.
     fs.copyFileSync(dbPath, bFile)
-    
-    // Cleanup: Keep only last 100 backups to avoid disk fill? 
-    // The user said "not replacing", but disk space is real. 
+
+    // Cleanup: Keep only last 100 backups to avoid disk fill?
+    // The user said "not replacing", but disk space is real.
     // I will keep it unlimited for now as per "not replacing" request.
   } catch (err) {
     console.error('Auto Backup failed:', err)
   }
 }
 
+/**
+ * Write a backup of the current database to `targetPath`.
+ *
+ * Uses the SQLite backup API so the copy also contains the data that is
+ * still in the write-ahead log, and so the backup file is a clean database
+ * that any SQLite tool can open.
+ *
+ * @param {string} targetPath where the backup file is written
+ * @returns {Promise<{ success: boolean, path?: string, message?: string }>}
+ */
+async function createBackupFile(targetPath) {
+  try {
+    if (fs.existsSync(targetPath)) fs.unlinkSync(targetPath)
+    await db.backup(targetPath)
+    return { success: true, path: targetPath }
+  } catch (err) {
+    console.error('Backup failed:', err)
+    return { success: false, message: err.message }
+  }
+}
+
+/**
+ * Check that a file is a usable library database before it replaces the
+ * live one. A wrong file must never destroy the current data.
+ *
+ * @param {string} sourcePath the file the user picked
+ * @returns {{ ok: boolean, message?: string, books?: number }}
+ */
+function inspectBackupFile(sourcePath) {
+  let source = null
+  try {
+    const same = path.resolve(sourcePath).toLowerCase() === path.resolve(dbPath).toLowerCase()
+    if (same) {
+      return { ok: false, message: 'This is the database that is in use. Pick a backup file.' }
+    }
+    source = new Database(sourcePath, { readonly: true, fileMustExist: true })
+    const tables = source
+      .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+      .all()
+      .map(r => r.name)
+    if (!tables.includes('books') || !tables.includes('members')) {
+      return {
+        ok: false,
+        message: 'This file is not a library backup. It has no books and members.',
+      }
+    }
+    const books = source.prepare('SELECT COUNT(*) AS c FROM books').get().c
+    return { ok: true, books }
+  } catch (err) {
+    return { ok: false, message: `This file cannot be opened as a library backup: ${err.message}` }
+  } finally {
+    if (source) { try { source.close() } catch (e) {} }
+  }
+}
+
+/**
+ * Replace the live database with a backup file.
+ *
+ * The copy used to be a plain file copy while the database was still open.
+ * The database runs in WAL mode, so the write-ahead log was checkpointed into
+ * the new file when the app exited and the old data came back - the restore
+ * was silently lost. The database is closed now, the write-ahead log is
+ * removed and the schema is applied to the restored file again.
+ *
+ * @param {string} sourcePath the backup file the user picked
+ * @returns {Promise<{ success: boolean, message?: string, books?: number, missingAmounts?: number }>}
+ */
+async function restoreFromFile(sourcePath) {
+  const check = inspectBackupFile(sourcePath)
+  if (!check.ok) return { success: false, message: check.message }
+
+  // A safety copy of the current data, so a restore can be undone.
+  performAutoBackup()
+
+  try {
+    db.close()
+  } catch (err) {
+    console.error('Closing the database failed:', err)
+  }
+  // The write-ahead log belongs to the old database and must not be replayed
+  // onto the restored file. If it cannot be removed, another program still has
+  // the database open and the restore is not safe.
+  const leftovers = []
+  for (const suffix of ['-wal', '-shm']) {
+    const file = dbPath + suffix
+    try { if (fs.existsSync(file)) fs.unlinkSync(file) }
+    catch (err) { leftovers.push(file) }
+  }
+  if (leftovers.length) {
+    db = new Database(dbPath)
+    refreshSchema()
+    return {
+      success: false,
+      message: 'The database is still in use. Close the software and restore the backup again.',
+    }
+  }
+  try {
+    fs.copyFileSync(sourcePath, dbPath)
+  } catch (err) {
+    console.error('Restore failed:', err)
+    db = new Database(dbPath)
+    refreshSchema()
+    return { success: false, message: `The backup could not be put in place: ${err.message}` }
+  }
+
+  db = new Database(dbPath)
+  refreshSchema()
+
+  const missingAmounts = db
+    .prepare('SELECT COUNT(*) AS c FROM books WHERE price IS NULL')
+    .get().c
+  console.log(`✅ Backup restored: ${check.books} book(s), ${missingAmounts} without an amount`)
+  return { success: true, books: check.books, missingAmounts }
+}
+
 // ─── Schema ───────────────────────────────────────────────────────────────────
-db.exec(`
+/**
+ * Create the tables the app needs.
+ *
+ * `IF NOT EXISTS` is used everywhere, so this can be run again on a restored
+ * backup: the tables that are already there keep their data and only the
+ * missing ones are created.
+ */
+function applyTables() {
+  db.exec(`
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
 
@@ -180,7 +348,19 @@ CREATE TABLE IF NOT EXISTS sponsors (
   member_id INTEGER REFERENCES members(id),
   description TEXT
 );
+`)
+}
 
+/**
+ * Create the indexes.
+ *
+ * This runs after the columns were added, because an index on a column that
+ * an old database file does not have yet would make the whole schema update
+ * fail - and then the backup could not be restored at all.
+ */
+function applyIndexes() {
+  try {
+    db.exec(`
 CREATE INDEX IF NOT EXISTS idx_members_reg ON members(reg_no);
 CREATE INDEX IF NOT EXISTS idx_books_isbn ON books(isbn);
 CREATE INDEX IF NOT EXISTS idx_borrowing_status ON borrowings(status);
@@ -188,12 +368,78 @@ CREATE INDEX IF NOT EXISTS idx_borrowing_due ON borrowings(due_date);
 CREATE INDEX IF NOT EXISTS idx_borrowing_issue ON borrowings(issue_date);
 CREATE INDEX IF NOT EXISTS idx_payments_date ON payments(date);
 `)
-try { db.exec("ALTER TABLE books ADD COLUMN price REAL DEFAULT 0"); } catch(e) {}
-try { db.exec("ALTER TABLE books ADD COLUMN sponsor_id INTEGER REFERENCES sponsors(id)"); } catch(e) {}
-try { db.exec('ALTER TABLE members ADD COLUMN gender TEXT;') } catch(e) {}
-try { db.exec('ALTER TABLE members ADD COLUMN blood_group TEXT;') } catch(e) {}
-try { db.exec('ALTER TABLE books ADD COLUMN volume TEXT;') } catch(e) {}
-try { db.exec('ALTER TABLE books ADD COLUMN translator TEXT;') } catch(e) {}
+  } catch (e) {
+    console.error('Index creation failed:', e)
+  }
+}
+
+/** Add the columns that older database files do not have yet. */
+function applyColumnMigrations() {
+  try { db.exec("ALTER TABLE books ADD COLUMN price REAL DEFAULT 0"); } catch(e) {}
+  try { db.exec("ALTER TABLE books ADD COLUMN sponsor_id INTEGER REFERENCES sponsors(id)"); } catch(e) {}
+  try { db.exec('ALTER TABLE members ADD COLUMN gender TEXT;') } catch(e) {}
+  try { db.exec('ALTER TABLE members ADD COLUMN blood_group TEXT;') } catch(e) {}
+  try { db.exec('ALTER TABLE books ADD COLUMN volume TEXT;') } catch(e) {}
+  try { db.exec('ALTER TABLE books ADD COLUMN translator TEXT;') } catch(e) {}
+}
+
+/**
+ * The columns every table has to have, with the definition used to add them.
+ *
+ * A backup that was taken with an older version of the app can miss columns
+ * that were added later. Restoring such a file would leave the app working on
+ * a half-old database, so every missing column is added here.
+ */
+const EXPECTED_COLUMNS = {
+  books: {
+    title_ml: 'TEXT', author: 'TEXT', translator: 'TEXT', category: 'TEXT', publisher: 'TEXT',
+    isbn: 'TEXT', edition: 'TEXT', year: 'INTEGER', language: "TEXT DEFAULT 'English'",
+    shelf_no: 'TEXT', qr_code_no: 'TEXT', cover_image: 'TEXT', total_copies: 'INTEGER DEFAULT 1',
+    available_copies: 'INTEGER DEFAULT 1', condition: "TEXT DEFAULT 'Good'", description: 'TEXT',
+    volume: 'TEXT', price: 'REAL', sponsor_id: 'INTEGER', date_added: 'DATE DEFAULT CURRENT_DATE',
+  },
+  members: {
+    full_name_ml: 'TEXT', whatsapp: 'TEXT', id_card_type: 'TEXT', address: 'TEXT',
+    address_ml: 'TEXT', photo: 'TEXT', dob: 'TEXT', gender: 'TEXT', blood_group: 'TEXT',
+    occupation: 'TEXT', email: 'TEXT', member_type: "TEXT DEFAULT 'General'",
+    fee_paid: 'INTEGER DEFAULT 0', fee_amount: 'REAL DEFAULT 0', payment_date: 'TEXT',
+    membership_start: 'TEXT', membership_expiry: 'TEXT', fine_balance: 'REAL DEFAULT 0',
+    status: "TEXT DEFAULT 'Active'",
+  },
+  borrowings: {
+    issue_date: 'TEXT DEFAULT CURRENT_DATE', due_date: 'TEXT', return_date: 'TEXT',
+    renewed: 'INTEGER DEFAULT 0', condition_on_return: 'TEXT', fine_amount: 'REAL DEFAULT 0',
+    fine_paid: 'INTEGER DEFAULT 0', status: "TEXT DEFAULT 'Issued'",
+  },
+  payments: { type: 'TEXT', amount: 'REAL', date: 'TEXT DEFAULT CURRENT_DATE', notes: 'TEXT' },
+}
+
+/** Add every column that is missing in the given table. */
+function ensureColumns(table, columns) {
+  let existing = []
+  try {
+    existing = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name)
+  } catch (e) {
+    return
+  }
+  if (!existing.length) return
+  for (const [name, definition] of Object.entries(columns)) {
+    if (existing.includes(name)) continue
+    try {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`)
+      console.log(`Added missing column ${table}.${name}`)
+    } catch (e) {
+      console.error(`Adding ${table}.${name} failed:`, e)
+    }
+  }
+}
+
+/** Make sure every table has all the columns the app needs. */
+function ensureAllColumns() {
+  for (const [table, columns] of Object.entries(EXPECTED_COLUMNS)) {
+    ensureColumns(table, columns)
+  }
+}
 
 // ─── Amount migration (v1.0.3) ────────────────────────────────────────────────
 // Versions before v1.0.1 never wrote `books.price`, so every book added with
@@ -201,31 +447,53 @@ try { db.exec('ALTER TABLE books ADD COLUMN translator TEXT;') } catch(e) {}
 // "not recorded". Convert those legacy zeros to NULL once (the UI then shows
 // "Set amount" and offers a quick editor), and remember that the conversion
 // ran so an amount the librarian later sets to 0 ("free") is never cleared.
-try {
-  const amountMigrated = db.prepare("SELECT value FROM settings WHERE key='amount_unknown_migrated'").get()
-  if (!amountMigrated) {
-    const legacyZeros = db.prepare('SELECT COUNT(*) AS c FROM books WHERE price IS NULL OR price = 0').get().c
-    if (legacyZeros > 0) {
-      performAutoBackup()
-      const res = db.prepare('UPDATE books SET price = NULL WHERE price IS NULL OR price = 0').run()
-      console.log(`✅ Amount migration: ${res.changes} book(s) marked as "amount not recorded"`)
+//
+// The flag lives in the database file, so a restored backup is migrated on
+// its own: an old backup gets the conversion, a backup that was taken after
+// the conversion keeps its amounts.
+function runAmountMigration() {
+  try {
+    const amountMigrated = db.prepare("SELECT value FROM settings WHERE key='amount_unknown_migrated'").get()
+    if (!amountMigrated) {
+      const legacyZeros = db.prepare('SELECT COUNT(*) AS c FROM books WHERE price IS NULL OR price = 0').get().c
+      if (legacyZeros > 0) {
+        performAutoBackup()
+        const res = db.prepare('UPDATE books SET price = NULL WHERE price IS NULL OR price = 0').run()
+        console.log(`✅ Amount migration: ${res.changes} book(s) marked as "amount not recorded"`)
+      }
+      db.prepare("INSERT OR REPLACE INTO settings(key,value) VALUES('amount_unknown_migrated',?)").run(new Date().toISOString())
     }
-    db.prepare("INSERT OR REPLACE INTO settings(key,value) VALUES('amount_unknown_migrated',?)").run(new Date().toISOString())
+  } catch (e) {
+    console.error('Amount migration failed:', e)
   }
-} catch (e) {
-  console.error('Amount migration failed:', e)
 }
 
-// Seed existing authors from books table into authors table (one-time migration)
-try {
-  const existingAuthors = db.prepare("SELECT DISTINCT author FROM books WHERE author IS NOT NULL AND author != ''").all()
-  const insertAuthor = db.prepare("INSERT OR IGNORE INTO authors(name) VALUES(?)")
-  for (const row of existingAuthors) {
-    try { insertAuthor.run(row.author) } catch(e) {}
-  }
-} catch(e) {}
+/** Seed existing authors from books table into authors table (one-time migration) */
+function seedAuthorsFromBooks() {
+  try {
+    const existingAuthors = db.prepare("SELECT DISTINCT author FROM books WHERE author IS NOT NULL AND author != ''").all()
+    const insertAuthor = db.prepare("INSERT OR IGNORE INTO authors(name) VALUES(?)")
+    for (const row of existingAuthors) {
+      try { insertAuthor.run(row.author) } catch(e) {}
+    }
+  } catch(e) {}
+}
 
+/**
+ * Bring the database up to date: schema, columns, amount migration, authors.
+ *
+ * Runs once when the app starts and again after a backup was restored.
+ */
+function refreshSchema() {
+  applyTables()
+  applyColumnMigrations()
+  ensureAllColumns()
+  applyIndexes()
+  runAmountMigration()
+  seedAuthorsFromBooks()
+}
 
+refreshSchema()
 
 // ─── Seed defaults ────────────────────────────────────────────────────────────
 const defaults = {

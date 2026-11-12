@@ -242,11 +242,11 @@ ipcMain.handle('backup-create', async () => {
     filters: [{ name: 'SQLite DB', extensions: ['db'] }],
   })
   if (filePath) {
-    const dbPath = db.getDbPath()
-    fs.copyFileSync(dbPath, filePath)
-    return { success: true, path: filePath }
+    // The SQLite backup API, not a plain file copy: a copy of the database
+    // file can be missing the changes that are still in the write-ahead log.
+    return await db.createBackupFile(filePath)
   }
-  return { success: false }
+  return { success: false, message: 'cancelled' }
 })
 ipcMain.handle('backup-restore', async () => {
   const { filePaths } = await dialog.showOpenDialog(mainWindow, {
@@ -255,12 +255,24 @@ ipcMain.handle('backup-restore', async () => {
     properties: ['openFile'],
   })
   if (filePaths && filePaths[0]) {
-    const dbPath = db.getDbPath()
-    fs.copyFileSync(filePaths[0], dbPath)
-    app.relaunch(); app.exit(0)
-    return { success: true }
+    const result = await db.restoreFromFile(filePaths[0])
+    if (result.success) {
+      app.relaunch(); app.exit(0)
+    }
+    return result
   }
-  return { success: false }
+  return { success: false, message: 'cancelled' }
+})
+ipcMain.handle('backup-restore-latest', async () => {
+  const file = db.getLatestBackupFile()
+  if (!file) {
+    return { success: false, message: 'There is no automatic backup yet.' }
+  }
+  const result = await db.restoreFromFile(file)
+  if (result.success) {
+    app.relaunch(); app.exit(0)
+  }
+  return result
 })
 ipcMain.handle('backup-get-path', () => db.getBackupPath())
 

@@ -81,6 +81,7 @@ setBookAmounts: (updates) => ipcRenderer.invoke('books-set-amounts', updates),
   // Backup
   createBackup:  () => ipcRenderer.invoke('backup-create'),
   restoreBackup: () => ipcRenderer.invoke('backup-restore'),
+  restoreLatestBackup: () => ipcRenderer.invoke('backup-restore-latest'),
   getBackupPath: () => ipcRenderer.invoke('backup-get-path'),
 
   // File / Media
