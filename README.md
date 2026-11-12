@@ -32,8 +32,8 @@ It runs fully offline on Windows and keeps all data in a local SQLite database.
 
 Download the latest setup from the releases page and run it:
 
-- `KPL_Setup_v1.0.5.exe` — installer with desktop shortcut
-- `KPL_Portable_v1.0.5.exe` — portable, no installation
+- `KPL_Setup_v1.0.6.exe` — installer with desktop shortcut
+- `KPL_Portable_v1.0.6.exe` — portable, no installation
 
 The setup is a guided installer:
 
@@ -51,6 +51,11 @@ Existing data is preserved when upgrading. The database lives at:
 Automatic backups are written to `%APPDATA%\kooroppada-library\db\backups`. A
 backup can be restored from **Settings → Backup**; the page also offers to put
 the newest automatic backup back in place.
+
+A backup that was taken with an older version of the software holds no book
+amounts. Restoring it does not throw the amounts away: they are looked up in
+the library that was replaced and in the automatic backups, and written back
+into the books that the backup had no amount for.
 
 Default first-run login: `admin` / `admin123`. Change it after signing in.
 
@@ -88,7 +93,7 @@ Setup.cs, Uninstall.cs     C# helper installers
 installer.iss              Inno Setup script
 DOCUMENTATION.md           end-user manual
 CHANGELOG.md               version history
-RELEASE_NOTES_v1.0.5.md    notes for the current release
+RELEASE_NOTES_v1.0.6.md    notes for the current release
 ```
 
 `AGENTS.md` describes the architecture, build quirks and verification steps in

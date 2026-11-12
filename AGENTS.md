@@ -116,6 +116,29 @@ Runtime data is not in the repository:
   setting to tell the two apart: the migration sets it, so a file that has it
   stores a real `0` for a free book. Without this check the app would report
   a backup from before v1.0.3 as holding an amount for every book.
+- **A restore brings the amounts back.** A backup that was taken with a
+  version that never saved the price holds no amounts at all, but the amounts
+  are still on the computer: the library that is replaced has them, and every
+  automatic backup holds every amount that was ever entered, because
+  `performAutoBackup()` runs on every change. `restoreFromFile()` therefore
+  builds an index of the amounts (`buildAmountIndex()`) from the library that
+  is replaced and from the automatic backups, and writes them into the
+  restored books (`recoverAmounts()`). A backup that holds its own amounts
+  keeps them; only the books without one are looked at.
+- **A book is only given an amount when there is no doubt.** The keys of the
+  index, from the safest to the least safe one: the same id with the same
+  title, the ISBN, the title with the author, and last a title that is on
+  exactly one book. Two books with the same key and different amounts make
+  the key unusable (`ambiguous`), so no amount can ever be invented. The
+  newest source wins, so a price that was corrected later is the one that is
+  used. The number of backup files that are looked at is bounded (300), because
+  the retention of the automatic backups is unlimited.
+- **The recovery fills in every missing amount, also a cleared one.** A book
+  whose amount was deliberately cleared in the editor gets the amount back on
+  the next restore, because the restore only knows that the amount is missing.
+  This is the trade-off of the automatic recovery: it is meant to bring back
+  what a restore would otherwise throw away, and the report after the restart
+  says how many amounts were written back.
 
 ## Verification
 
@@ -124,10 +147,13 @@ There is no automated test suite. Changes are verified by:
 1. `npm run build` — must produce both installers without errors. NSIS warnings
    are build errors here, so the custom include has to compile cleanly.
 2. A database script run under Electron's Node (see above) covering the changed
-   queries, including failure paths. The v1.0.5 scripts live in the session
+   queries, including failure paths. The v1.0.6 scripts live in the session
    temp folder: `kpl-db-test.js` (query behaviour),
-   `kpl-amount-migration-test.js` (upgrade from an old database file) and
-   `kpl-restore-test.js` (backup, restore and the restore report).
+   `kpl-amount-migration-test.js` (upgrade from an old database file),
+   `kpl-restore-test.js` (backup, restore and the restore report) and
+   `kpl-amount-recovery-test.js` (the amounts that are found again after a
+   restore, including the backup file of the library that reported the
+   problem).
 3. Driving the packaged app with the Chrome DevTools Protocol
    (`--remote-debugging-port=9222`) to check the real UI, IPC round-trips and
    console errors. The restore confirmation of the main process is a native

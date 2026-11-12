@@ -2,6 +2,33 @@
 
 All notable changes to the Public Library Kooroppada management system.
 
+## v1.0.6 — 2026-11-12
+
+### Fixed
+
+- **A restore brings the amounts back.** A backup that was taken with a version
+  that never saved the price holds no amounts. Restoring it left every book
+  showing "Set amount" although the amounts were still on the computer: the
+  library that was replaced has them, and every automatic backup holds every
+  amount that was ever entered, because one backup is written on every change.
+  The amounts are now looked up in those places and written back into the
+  restored books — the librarian does not type them a second time.
+- **A book is only given an amount when there is no doubt.** A book is
+  recognised by its id and title, by its ISBN, by its title and author, and
+  last by a title that is on exactly one book. A match that could be more than
+  one book is never used, so no amount can be invented. A backup that holds
+  its own amounts keeps them.
+- **The report says how many amounts were found.** After the restart the app
+  says how many amounts were found and written back, and how many books still
+  wait for one. The confirmation before the restore says the same.
+
+### Changed
+
+- **The Books page names the cause in the same way.** The banner says that the
+  amounts are looked up in the library and in the automatic backups when a
+  backup is restored, and that the books listed there are the ones that were
+  nowhere to be found.
+
 ## v1.0.5 — 2026-11-12
 
 ### Fixed
