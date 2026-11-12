@@ -46,6 +46,10 @@ if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true })
 module.exports.getBackupPath = () => backupDir
 module.exports.createBackupFile = createBackupFile
 module.exports.restoreFromFile = restoreFromFile
+module.exports.inspectBackupFile = inspectBackupFile
+module.exports.countAmounts = countAmounts
+module.exports.getRestoreReport = readRestoreReport
+module.exports.clearRestoreReport = clearRestoreReport
 /**
  * The newest automatic backup file.
  *
@@ -126,11 +130,43 @@ async function createBackupFile(targetPath) {
 }
 
 /**
+ * How many books of a database hold an amount.
+ *
+ * A file that was taken before v1.0.3 has the column default `0` for every
+ * book. That `0` means "not recorded", not "free", so it does not count as
+ * an amount. The `amount_unknown_migrated` setting tells the two apart: the
+ * migration sets it, so a file that has it stores a real `0` for a free book.
+ *
+ * @param {import('better-sqlite3').Database} conn the database to count
+ * @returns {{ books: number, withAmounts: number }}
+ */
+function countAmountsIn(conn) {
+  const books = conn.prepare('SELECT COUNT(*) AS c FROM books').get().c
+  const hasPrice = conn.prepare('PRAGMA table_info(books)').all().some(c => c.name === 'price')
+  if (!hasPrice) return { books, withAmounts: 0 }
+  let migrated = false
+  try {
+    migrated = !!conn.prepare("SELECT value FROM settings WHERE key='amount_unknown_migrated'").get()
+  } catch (err) {
+    // A file without a settings table is an old one.
+  }
+  const withAmounts = migrated
+    ? conn.prepare('SELECT COUNT(*) AS c FROM books WHERE price IS NOT NULL').get().c
+    : conn.prepare('SELECT COUNT(*) AS c FROM books WHERE price IS NOT NULL AND price <> 0').get().c
+  return { books, withAmounts }
+}
+
+/**
  * Check that a file is a usable library database before it replaces the
  * live one. A wrong file must never destroy the current data.
  *
+ * The number of books with an amount is part of the answer, because a backup
+ * that was taken with a version that never saved the price holds no amounts
+ * at all. The librarian has to know that before the current data is
+ * replaced, not afterwards.
+ *
  * @param {string} sourcePath the file the user picked
- * @returns {{ ok: boolean, message?: string, books?: number }}
+ * @returns {{ ok: boolean, message?: string, books?: number, withAmounts?: number, missingAmounts?: number }}
  */
 function inspectBackupFile(sourcePath) {
   let source = null
@@ -150,12 +186,68 @@ function inspectBackupFile(sourcePath) {
         message: 'This file is not a library backup. It has no books and members.',
       }
     }
-    const books = source.prepare('SELECT COUNT(*) AS c FROM books').get().c
-    return { ok: true, books }
+    const { books, withAmounts } = countAmountsIn(source)
+    return { ok: true, books, withAmounts, missingAmounts: books - withAmounts }
   } catch (err) {
     return { ok: false, message: `This file cannot be opened as a library backup: ${err.message}` }
   } finally {
     if (source) { try { source.close() } catch (e) {} }
+  }
+}
+
+/**
+ * How many books of the live database have an amount.
+ *
+ * @returns {{ books: number, withAmounts: number }}
+ */
+function countAmounts() {
+  try {
+    return countAmountsIn(db)
+  } catch (err) {
+    return { books: 0, withAmounts: 0 }
+  }
+}
+
+// The report of the last restore. It is a file next to the database and not
+// a row in the settings table: a restore replaces the database file, and a
+// setting written into the restored file would be lost with the old one.
+const restoreReportPath = path.join(persistentDbDir, 'restore-report.json')
+
+/**
+ * Write the result of a restore, so it can be shown after the restart.
+ *
+ * @param {{ books: number, withAmounts: number, missingAmounts: number, at: string }} report
+ */
+function writeRestoreReport(report) {
+  try {
+    fs.writeFileSync(restoreReportPath, JSON.stringify(report), 'utf8')
+  } catch (err) {
+    console.error('Writing the restore report failed:', err)
+  }
+}
+
+/**
+ * The result of the last restore, or null when there was none.
+ *
+ * @returns {{ books: number, withAmounts: number, missingAmounts: number, at: string }|null}
+ */
+function readRestoreReport() {
+  try {
+    if (!fs.existsSync(restoreReportPath)) return null
+    const report = JSON.parse(fs.readFileSync(restoreReportPath, 'utf8'))
+    return report && typeof report === 'object' ? report : null
+  } catch (err) {
+    console.error('Reading the restore report failed:', err)
+    return null
+  }
+}
+
+/** Remove the report of the last restore, so it is shown only once. */
+function clearRestoreReport() {
+  try {
+    if (fs.existsSync(restoreReportPath)) fs.unlinkSync(restoreReportPath)
+  } catch (err) {
+    console.error('Removing the restore report failed:', err)
   }
 }
 
@@ -215,8 +307,22 @@ async function restoreFromFile(sourcePath) {
   const missingAmounts = db
     .prepare('SELECT COUNT(*) AS c FROM books WHERE price IS NULL')
     .get().c
+  const withAmounts = db
+    .prepare('SELECT COUNT(*) AS c FROM books WHERE price IS NOT NULL')
+    .get().c
   console.log(`✅ Backup restored: ${check.books} book(s), ${missingAmounts} without an amount`)
-  return { success: true, books: check.books, missingAmounts }
+
+  // The app restarts itself after a restore, so the result cannot be shown
+  // by the window that started the restore. It is written to a file next to
+  // the database and shown after the next start.
+  writeRestoreReport({
+    books: check.books,
+    withAmounts,
+    missingAmounts,
+    at: new Date().toISOString(),
+  })
+
+  return { success: true, books: check.books, withAmounts, missingAmounts }
 }
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
