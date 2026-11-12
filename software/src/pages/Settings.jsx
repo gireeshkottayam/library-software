@@ -126,12 +126,41 @@ export default function Settings() {
   async function handleBackup() {
     const res = await window.api.createBackup()
     if (res.success) toast2(`Backup saved to: ${res.path}`)
+    else if (res.message && res.message !== 'cancelled') toast2(`Backup failed: ${res.message}`,'error')
     else toast2('Backup cancelled','error')
   }
 
   async function handleRestore() {
-    if (!confirm('Restore will restart the app. Continue?')) return
-    await window.api.restoreBackup()
+    const ok = confirm(
+      'Restore data from a previous backup file.\n\n' +
+      'This replaces all current books, members, fees and settings, and restarts the app.\n' +
+      'A safety backup of the current data is kept automatically.'
+    )
+    if (!ok) return
+    const res = await window.api.restoreBackup()
+    if (!res) return
+    if (res.success) {
+      // The app restarts itself, so this only shows when the restart fails.
+      toast2(`Backup restored: ${res.books} book(s)`, 'success')
+    } else if (res.message && res.message !== 'cancelled') {
+      toast2(`Restore failed: ${res.message}`, 'error')
+    }
+  }
+
+  async function handleRestoreLatest() {
+    const ok = confirm(
+      'Restore the newest automatic backup.\n\n' +
+      'This replaces all current books, members, fees and settings, and restarts the app.\n' +
+      'A safety backup of the current data is kept automatically.'
+    )
+    if (!ok) return
+    const res = await window.api.restoreLatestBackup()
+    if (!res) return
+    if (res.success) {
+      toast2(`Automatic backup restored: ${res.books} book(s)`, 'success')
+    } else if (res.message && res.message !== 'cancelled') {
+      toast2(`Restore failed: ${res.message}`, 'error')
+    }
   }
 
   async function addUser() {
@@ -624,6 +653,9 @@ export default function Settings() {
                 {backupPath}
               </code>
             </p>
+            <button className="btn" style={{marginTop:12}} onClick={handleRestoreLatest}>
+              <Upload size={15}/> Restore the newest automatic backup
+            </button>
           </div>
         </div>
       )}
