@@ -234,6 +234,55 @@ ipcMain.handle('authors-find-similar', (_, name) => db.findSimilarAuthors(name))
 ipcMain.handle('authors-merge', (_, data) => db.mergeAuthors(data))
 
 
+/**
+ * The text of the confirmation before a restore.
+ *
+ * A restore replaces every book, member, fee and setting. When the backup
+ * holds no amounts, the amounts that were entered in the current database
+ * are lost by the restore, and the librarian has to know that before it
+ * happens - not after.
+ *
+ * @param {{ books: number, withAmounts: number, missingAmounts: number }} backup
+ * @param {{ books: number, withAmounts: number }} current
+ * @param {string} lang 'en' or 'ml'
+ * @returns {{ title: string, message: string }}
+ */
+function restoreConfirmText(backup, current, lang) {
+  const ml = lang === 'ml'
+  const lines = []
+  if (ml) {
+    lines.push('ബാക്കപ്പ് തിരിക്കുന്നത് ഇപ്പോൾ ഉള്ള എല്ലാ പുസ്തകങ്ങളും അംഗങ്ങളും ഫീസുകളും ക്രമീകരണങ്ങളും മാറ്റിസ്ഥില്ല. സോഫ്റ്റ്‌വെയർ തന്നെ അടയ്ക്കും തുടങ്ങും.')
+    lines.push('')
+    lines.push(`ബാക്കപ്പിൽ ${backup.books} പുസ്തകങ്ങൾ ഉണ്ട്.`)
+  } else {
+    lines.push('Restoring replaces every book, member, fee and setting that is there now.')
+    lines.push('The software restarts afterwards.')
+    lines.push('')
+    lines.push(`The backup holds ${backup.books} book${backup.books === 1 ? '' : 's'}.`)
+  }
+  if (backup.missingAmounts > 0) {
+    if (ml) {
+      lines.push('')
+      lines.push(`ആ പുസ്തകങ്ങളിൽ ${backup.missingAmounts} പുസ്തകങ്ങളുടെ വില രേഖപ്പെടുത്തിയിട്ടില്ല — ബാക്കപ്പ് എടുത്തപ്പോൾ ഉപയോഗിച്ച പതിപ്പ് വില രേഖപ്പെടുത്തില്ലാത്ത പതിപ്പ് ആണ്. ഇപ്പോൾ നിങ്ങൾ ടൈപ്പ് ചെയ്ത വിലകൾ ഈ ബാക്കപ്പിലേക്ക് മാറും.`)
+    } else {
+      lines.push('')
+      lines.push(`It has no amount for ${backup.missingAmounts} of those books — it was taken with a version that never saved the price. The amounts you entered now will be replaced by them.`)
+    }
+  } else if (current.withAmounts > backup.withAmounts) {
+    if (ml) {
+      lines.push('')
+      lines.push(`ബാക്കപ്പിൽ ${backup.withAmounts} പുസ്തകങ്ങളുടെ വില മാത്രമാണ് രേഖപ്പെടുത്തിയിരുന്നത്. ഇപ്പോൾ ഉള്ള ${current.withAmounts} വിലകളിൽ ഒന്നും ബാക്കപ്പിലില്ല.`)
+    } else {
+      lines.push('')
+      lines.push(`It holds an amount for ${backup.withAmounts} books. The ${current.withAmounts} amounts you have now are not all in the backup and will be replaced.`)
+    }
+  }
+  return {
+    title: ml ? 'ബാക്കപ്പ് തിരിക്കണോ?' : 'Restore this backup?',
+    message: lines.join('\n'),
+  }
+}
+
 // Backup / Restore
 ipcMain.handle('backup-create', async () => {
   const { filePath } = await dialog.showSaveDialog(mainWindow, {
@@ -248,26 +297,57 @@ ipcMain.handle('backup-create', async () => {
   }
   return { success: false, message: 'cancelled' }
 })
-ipcMain.handle('backup-restore', async () => {
+ipcMain.handle('backup-restore', async (_, lang) => {
   const { filePaths } = await dialog.showOpenDialog(mainWindow, {
     title: 'Restore Backup',
     filters: [{ name: 'SQLite DB', extensions: ['db'] }],
     properties: ['openFile'],
   })
-  if (filePaths && filePaths[0]) {
-    const result = await db.restoreFromFile(filePaths[0])
-    if (result.success) {
-      app.relaunch(); app.exit(0)
-    }
-    return result
+  if (!filePaths || !filePaths[0]) return { success: false, message: 'cancelled' }
+
+  const backup = db.inspectBackupFile(filePaths[0])
+  if (!backup.ok) return { success: false, message: backup.message }
+
+  const current = db.countAmounts()
+  const text = restoreConfirmText(backup, current, lang)
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: 'warning',
+    buttons: [lang === 'ml' ? 'തിരിക്കുക' : 'Restore', lang === 'ml' ? 'റദ്ദാക്കുക' : 'Cancel'],
+    defaultId: 0,
+    cancelId: 1,
+    title: text.title,
+    message: text.title,
+    detail: text.message,
+  })
+  if (response !== 0) return { success: false, message: 'cancelled' }
+
+  const result = await db.restoreFromFile(filePaths[0])
+  if (result.success) {
+    app.relaunch(); app.exit(0)
   }
-  return { success: false, message: 'cancelled' }
+  return result
 })
-ipcMain.handle('backup-restore-latest', async () => {
+ipcMain.handle('backup-restore-latest', async (_, lang) => {
   const file = db.getLatestBackupFile()
   if (!file) {
     return { success: false, message: 'There is no automatic backup yet.' }
   }
+  const backup = db.inspectBackupFile(file)
+  if (!backup.ok) return { success: false, message: backup.message }
+
+  const current = db.countAmounts()
+  const text = restoreConfirmText(backup, current, lang)
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: 'warning',
+    buttons: [lang === 'ml' ? 'തിരിക്കുക' : 'Restore', lang === 'ml' ? 'റദ്ദാക്കുക' : 'Cancel'],
+    defaultId: 0,
+    cancelId: 1,
+    title: text.title,
+    message: text.title,
+    detail: text.message,
+  })
+  if (response !== 0) return { success: false, message: 'cancelled' }
+
   const result = await db.restoreFromFile(file)
   if (result.success) {
     app.relaunch(); app.exit(0)
@@ -275,6 +355,8 @@ ipcMain.handle('backup-restore-latest', async () => {
   return result
 })
 ipcMain.handle('backup-get-path', () => db.getBackupPath())
+ipcMain.handle('backup-get-report', () => db.getRestoreReport())
+ipcMain.handle('backup-clear-report', () => { db.clearRestoreReport(); return { success: true } })
 
 // File dialog for photos
 ipcMain.handle('pick-image', async () => {

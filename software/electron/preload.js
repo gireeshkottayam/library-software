@@ -80,9 +80,11 @@ setBookAmounts: (updates) => ipcRenderer.invoke('books-set-amounts', updates),
 
   // Backup
   createBackup:  () => ipcRenderer.invoke('backup-create'),
-  restoreBackup: () => ipcRenderer.invoke('backup-restore'),
-  restoreLatestBackup: () => ipcRenderer.invoke('backup-restore-latest'),
+  restoreBackup: (lang) => ipcRenderer.invoke('backup-restore', lang),
+  restoreLatestBackup: (lang) => ipcRenderer.invoke('backup-restore-latest', lang),
   getBackupPath: () => ipcRenderer.invoke('backup-get-path'),
+  getRestoreReport: () => ipcRenderer.invoke('backup-get-report'),
+  clearRestoreReport: () => ipcRenderer.invoke('backup-clear-report'),
 
   // File / Media
   pickImage: () => ipcRenderer.invoke('pick-image'),
