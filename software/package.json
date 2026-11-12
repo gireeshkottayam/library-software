@@ -1,6 +1,6 @@
 {
   "name": "kooroppada-library",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Public Library Kooroppada - Library Management System",
   "main": "electron/main.js",
   "scripts": {
@@ -50,11 +50,14 @@
       "icon": "public/icon.ico"
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "deleteAppDataOnUninstall": false
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "include": "build/installer.nsh"
     },
     "files": [
       "dist/**/*",
