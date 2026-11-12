@@ -55,11 +55,16 @@ function findSimilarAuthors(name, list) {
     .sort((a, b) => b.score - a.score)
     .slice(0, 6)
 }
-/** ₹ amount with Indian digit grouping; null when there is no amount. */
+/** ₹ amount with Indian digit grouping; null when the value is not a usable number. */
 function formatINR(value) {
+  if (value === '' || value == null) return null
   const n = Number(value)
-  if (!Number.isFinite(n) || n <= 0) return null
-  return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(n)
+  if (!Number.isFinite(n) || n < 0) return null
+  return '₹' + new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(n)
+}
+/** True when nothing has been recorded for this book's amount yet. */
+function hasNoAmount(book) {
+  return !book || book.price === '' || book.price == null
 }
 
 export default function Books() {
@@ -88,6 +93,8 @@ export default function Books() {
   const [newSponsor, setNewSponsor] = useState({ name:'', type:'External', member_id:null })
   const [members, setMembers] = useState([])
   const [memberSearch, setMemberSearch] = useState('')
+  const [amountTargets, setAmountTargets] = useState([])
+  const [amountEdits, setAmountEdits] = useState({})
 
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -137,7 +144,35 @@ export default function Books() {
 
   function toast2(msg, type='success') { setToast({msg,type}); setTimeout(()=>setToast(null),3000) }
   function openAdd() { setForm(form0); setModal('add') }
-  function openEdit(b) { setForm({...b}); setSel(b); setModal('edit') }
+  function openEdit(b) { setForm({...b, price: hasNoAmount(b) ? '' : b.price}); setSel(b); setModal('edit') }
+  const missingAmountBooks = books.filter(hasNoAmount)
+
+  // Quick amount editor: one book (from the Amount cell) or every book still missing one.
+  function openAmountEditor(list) {
+    const targets = list || missingAmountBooks
+    const edits = {}
+    for (const b of targets) edits[b.id] = ''
+    setAmountTargets(targets)
+    setAmountEdits(edits)
+    setModal('amount')
+  }
+
+  async function saveAmounts() {
+    const updates = amountTargets
+      .filter(b => amountEdits[b.id] !== '' && amountEdits[b.id] != null)
+      .map(b => ({ id: b.id, price: Number(amountEdits[b.id]) }))
+    if (updates.length === 0) { setModal(null); return }
+    if (updates.some(u => !Number.isFinite(u.price) || u.price < 0)) {
+      toast2('Enter a valid amount for every filled row', 'error')
+      return
+    }
+    const res = await window.api.setBookAmounts(updates)
+    if (res && res.success) {
+      toast2(`Amount saved for ${res.updated} book${res.updated === 1 ? '' : 's'}`)
+      setModal(null)
+      load()
+    } else toast2((res && res.message) || 'Could not save amounts', 'error')
+  }
 
   async function openQr(b) {
     setSel(b)
@@ -569,7 +604,7 @@ export default function Books() {
       }
     }
 
-    const price = form.price === '' || form.price == null ? 0 : Math.max(0, Number(form.price) || 0)
+    const price = form.price === '' || form.price == null ? null : Math.max(0, Number(form.price) || 0)
     const payload = { ...form, price }
     const res = modal==='add' ? await window.api.addBook(payload) : await window.api.updateBook(selected.id,payload)
     if (res.success) { 
@@ -625,6 +660,26 @@ export default function Books() {
         ))}
       </div>
 
+      {missingAmountBooks.length > 0 && (
+        <div className="card" style={{marginBottom:16, padding:'12px 16px', display:'flex', gap:12, alignItems:'center', flexWrap:'wrap', borderLeft:'4px solid var(--amber)'}}>
+          <span style={{fontSize:20}}>💰</span>
+          <div style={{flex:1, minWidth:220}}>
+            <div style={{fontWeight:700}}>
+              <span className="lang-en">{missingAmountBooks.length} book{missingAmountBooks.length===1?' has':'s have'} no amount recorded</span>
+              <span className="lang-ml">{missingAmountBooks.length} പുസ്തകങ്ങളുടെ വില രേഖപ്പെടുത്തിയിട്ടില്ല</span>
+            </div>
+            <div className="td-muted" style={{fontSize:12}}>
+              <span className="lang-en">Older versions of this app did not save amounts, so they cannot be recovered automatically. Enter them once here and the list shows them immediately.</span>
+              <span className="lang-ml">പഴയ പതിപ്പ് വില സൂക്ഷിച്ചിരുന്നില്ല. ഇവിടെ ഒരിക്കൽ നൽകിയാൽ പട്ടികയിൽ ഉടൻ കാണാം.</span>
+            </div>
+          </div>
+          <button className="btn btn--primary" onClick={()=>openAmountEditor(missingAmountBooks)}>
+            <span className="lang-en">Set amounts</span>
+            <span className="lang-ml">വില നൽകുക</span>
+          </button>
+        </div>
+      )}
+
       <div className="card" style={{padding:0,overflow:'hidden'}}>
         <div className="table-wrap">
           {loading ? <div style={{padding:40,textAlign:'center',color:'var(--text-muted)'}}>Loading…</div>
@@ -654,7 +709,19 @@ export default function Books() {
                     <td style={{textAlign:'center'}}>{b.total_copies}</td>
                     <td style={{textAlign:'center'}}><span className={`badge ${b.available_copies>0?'badge--green':'badge--red'}`}>{b.available_copies}</span></td>
                     <td><span className={`badge ${b.condition==='Good'?'badge--green':b.condition==='Fair'?'badge--amber':'badge--red'}`}>{b.condition}</span></td>
-                    <td style={{fontWeight:600}}>{formatINR(b.price) ? `₹${formatINR(b.price)}` : '—'}</td>
+                    <td style={{fontWeight:600, whiteSpace:'nowrap'}}>
+                      {hasNoAmount(b) ? (
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--sm"
+                          onClick={()=>openAmountEditor([b])}
+                          title="Amount not recorded — click to set it"
+                          style={{padding:'2px 8px', fontSize:11, cursor:'pointer', color:'var(--text-muted)'}}
+                        >Set amount</button>
+                      ) : Number(b.price) === 0 ? (
+                        <span className="td-muted">Free</span>
+                      ) : formatINR(b.price)}
+                    </td>
                     <td>
                       <div style={{display:'flex',gap:6}}>
                         <button className="btn btn--ghost btn--icon btn--sm" onClick={()=>openQr(b)} title="QR Code"><QrCode size={14}/></button>
@@ -774,7 +841,7 @@ export default function Books() {
                 <div className="form-group">
                   <label className="form-label">Amount (₹)</label>
                   <input className="form-input" type="number" inputMode="decimal" min="0" step="0.01" name="price" value={form.price??''} onChange={hc} placeholder="Enter amount"/>
-                  <div className="td-muted" style={{fontSize:11, marginTop:4}}>Optional. Leave blank when the book has no price.</div>
+                  <div className="td-muted" style={{fontSize:11, marginTop:4}}>Optional. Leave blank when the amount is not known; type 0 for a free copy.</div>
                 </div>
 
                 <div className="form-group form-full"><label className="form-label">Description</label><textarea className="form-textarea" name="description" value={form.description||''} onChange={hc} placeholder="Notes…"/></div>
@@ -798,6 +865,71 @@ export default function Books() {
               <div className="td-muted">{selected.qr_code_no||`BOOK-${selected.id}`}</div>
               {selected.shelf_no && <span className="badge badge--accent">Shelf: {selected.shelf_no}</span>}
               <button className="btn btn--primary" onClick={()=>{const a=document.createElement('a');a.download=`qr-${selected.id}.png`;a.href=qrImg;a.click()}}><Download size={14}/> Download</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modal==='amount' && (
+        <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setModal(null)}>
+          <div className="modal" style={{maxWidth:560}}>
+            <div className="modal__header">
+              <div className="modal__title">💰 <span className="lang-en">Set Book Amounts</span><span className="lang-ml">പുസ്തകങ്ങളുടെ വില</span></div>
+              <button className="modal__close" onClick={()=>setModal(null)}><X size={16}/></button>
+            </div>
+            <div className="modal__body">
+              <div className="td-muted" style={{fontSize:12, marginBottom:12, lineHeight:1.5}}>
+                <span className="lang-en">
+                  Older versions of this app never saved the amount, so the original prices cannot be recovered.
+                  Type each amount and press Enter to move to the next book. Type 0 for a free copy; leave a field blank to keep it as “not recorded”.
+                </span>
+                <span className="lang-ml">
+                  പഴയ പതിപ്പ് വില സൂക്ഷിച്ചിരുന്നില്ല. ഓരോ വിലയും നൽകി Enter അമർത്തുക. സൗജന്യ പുസ്തകത്തിന് 0 നൽകുക.
+                </span>
+              </div>
+              {amountTargets.length === 0 ? (
+                <div className="td-muted">No books need an amount.</div>
+              ) : (
+                <div style={{display:'flex', flexDirection:'column', gap:8, maxHeight:'52vh', overflowY:'auto'}}>
+                  {amountTargets.map((b, i) => (
+                    <div key={b.id} style={{display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:8, background:'var(--bg-primary)', border:'1px solid var(--glass-border)'}}>
+                      <div style={{flex:1, minWidth:0}}>
+                        <div style={{fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
+                          {b.title}{b.volume ? ` (${b.volume})` : ''}
+                        </div>
+                        <div className="td-muted" style={{fontSize:11, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
+                          {b.author || '—'}
+                          {!hasNoAmount(b) && b.price !== '' ? ` · now ${Number(b.price) === 0 ? 'Free' : formatINR(b.price)}` : ''}
+                        </div>
+                      </div>
+                      <input
+                        id={`amt-${b.id}`}
+                        className="form-input"
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="0.01"
+                        autoFocus={i === 0}
+                        placeholder={hasNoAmount(b) ? 'Amount' : (Number(b.price) === 0 ? 'Free' : String(b.price))}
+                        value={amountEdits[b.id] ?? ''}
+                        onChange={e=>setAmountEdits(p=>({...p,[b.id]:e.target.value}))}
+                        onKeyDown={e=>{
+                          if (e.key !== 'Enter') return
+                          e.preventDefault()
+                          const next = amountTargets[i+1]
+                          const el = next ? document.getElementById(`amt-${next.id}`) : null
+                          if (el) el.focus(); else saveAmounts()
+                        }}
+                        style={{width:130, textAlign:'right'}}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="modal__footer">
+              <button className="btn btn--ghost" onClick={()=>setModal(null)}>Cancel</button>
+              <button className="btn btn--primary" onClick={saveAmounts}>Save Amounts</button>
             </div>
           </div>
         </div>

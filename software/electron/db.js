@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS books (
   condition TEXT DEFAULT 'Good',
   description TEXT,
   volume TEXT,
-  price REAL DEFAULT 0,
+  price REAL,
   sponsor_id INTEGER REFERENCES sponsors(id),
   date_added DATE DEFAULT CURRENT_DATE
 );
@@ -195,6 +195,27 @@ try { db.exec('ALTER TABLE members ADD COLUMN blood_group TEXT;') } catch(e) {}
 try { db.exec('ALTER TABLE books ADD COLUMN volume TEXT;') } catch(e) {}
 try { db.exec('ALTER TABLE books ADD COLUMN translator TEXT;') } catch(e) {}
 
+// ─── Amount migration (v1.0.3) ────────────────────────────────────────────────
+// Versions before v1.0.1 never wrote `books.price`, so every book added with
+// them carries the column default 0. That 0 is not a real amount, it means
+// "not recorded". Convert those legacy zeros to NULL once (the UI then shows
+// "Set amount" and offers a quick editor), and remember that the conversion
+// ran so an amount the librarian later sets to 0 ("free") is never cleared.
+try {
+  const amountMigrated = db.prepare("SELECT value FROM settings WHERE key='amount_unknown_migrated'").get()
+  if (!amountMigrated) {
+    const legacyZeros = db.prepare('SELECT COUNT(*) AS c FROM books WHERE price IS NULL OR price = 0').get().c
+    if (legacyZeros > 0) {
+      performAutoBackup()
+      const res = db.prepare('UPDATE books SET price = NULL WHERE price IS NULL OR price = 0').run()
+      console.log(`✅ Amount migration: ${res.changes} book(s) marked as "amount not recorded"`)
+    }
+    db.prepare("INSERT OR REPLACE INTO settings(key,value) VALUES('amount_unknown_migrated',?)").run(new Date().toISOString())
+  }
+} catch (e) {
+  console.error('Amount migration failed:', e)
+}
+
 // Seed existing authors from books table into authors table (one-time migration)
 try {
   const existingAuthors = db.prepare("SELECT DISTINCT author FROM books WHERE author IS NOT NULL AND author != ''").all()
@@ -276,11 +297,15 @@ function authorParts(value) {
     .filter(Boolean)
 }
 
-/** Convert any user/provider value to a safe non-negative amount. */
+/**
+ * Convert a user/provider value to a safe non-negative amount.
+ * Blank or unusable input becomes `null`, which means "amount not recorded";
+ * a real zero is kept as 0, which means "free".
+ */
 function toMoney(value) {
-  if (value === '' || value == null) return 0
+  if (value === '' || value == null) return null
   const n = Number(value)
-  if (!Number.isFinite(n) || n < 0) return 0
+  if (!Number.isFinite(n) || n < 0) return null
   return Math.round(n * 100) / 100
 }
 
@@ -529,6 +554,25 @@ module.exports.updateBook = (id, data) => {
          data.description||null, data.volume||null, toMoney(data.price), data.sponsor_id||null, id)
   performAutoBackup()
   return { success: true }
+}
+/**
+ * Save amounts for several books in one transaction (one backup, not one each).
+ * `price` may be a number, a numeric string, `null`/`''` (not recorded) or 0 (free).
+ * @param {Array<{id:number, price:(number|string|null)}>} updates
+ * @returns {{success:true, updated:number}}
+ */
+module.exports.setBookAmounts = (updates) => {
+  const rows = Array.isArray(updates) ? updates.filter(row => row && row.id != null) : []
+  if (rows.length === 0) return { success: true, updated: 0 }
+  const stmt = db.prepare('UPDATE books SET price=? WHERE id=?')
+  const applyAll = db.transaction((list) => {
+    let changed = 0
+    for (const row of list) changed += stmt.run(toMoney(row.price), row.id).changes
+    return changed
+  })
+  const updated = applyAll(rows)
+  if (updated > 0) performAutoBackup()
+  return { success: true, updated }
 }
 module.exports.deleteBook = (id) => {
   const active = db.prepare("SELECT COUNT(*) as c FROM borrowings WHERE book_id=? AND status='Issued'").get(id)
