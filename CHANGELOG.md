@@ -2,6 +2,30 @@
 
 All notable changes to the Public Library Kooroppada management system.
 
+## v1.0.5 — 2026-11-12
+
+### Fixed
+
+- **The app now says what a restore did.** A restore restarts the software,
+  so the window that started it could no longer show the result — the app came
+  back with a changed library and no explanation. The result is now written
+  next to the database and shown after the restart: how many books came back,
+  how many of them have no amount, and what to do about it.
+- **A restore warns before it replaces the amounts.** The confirmation now
+  tells the librarian how many books the backup holds and how many of them
+  have an amount. A backup from a version that never saved the price is
+  recognised as such, so nobody loses amounts without a warning.
+- **The Books page names the cause.** The banner says that the amount of
+  these books was never stored, so it is neither in the database nor in the
+  old backups, and that no restore can bring it back.
+
+### Changed
+
+- **Entering many amounts is safe now.** The amount editor shows how many of
+  the books already have an amount, has a search field to find a book, and
+  saves every amount right away when the field is left or Enter is pressed.
+  A long session cannot lose the typing any more.
+
 ## v1.0.4 — 2026-11-12
 
 ### Fixed

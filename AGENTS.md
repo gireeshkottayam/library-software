@@ -100,6 +100,22 @@ Runtime data is not in the repository:
   an old database file does not have makes the whole schema update fail.
   `ensureAllColumns()` adds any column that is missing, so a backup from any
   version of the app can be restored.
+- **A restore restarts the app, so its result cannot be shown by the window
+  that started it.** The result is written to `restore-report.json` next to the
+  database (`%APPDATA%\kooroppada-library\db\`) and read by `App.jsx` after
+  the next start. It is a file and not a setting, because a restore replaces
+  the database file and a setting written into the restored file would be
+  lost with the old one.
+- **The main process owns the restore confirmation.** Only there is the
+  content of the picked file known, so `main.js` inspects it
+  (`inspectBackupFile()`) and shows how many books it holds and how many of
+  them have an amount before anything is replaced. The renderer must not ask
+  a second time.
+- **A `0` in a file without the `amount_unknown_migrated` setting means
+  "not recorded", not "free".** `countAmountsIn()` in `db.js` reads that
+  setting to tell the two apart: the migration sets it, so a file that has it
+  stores a real `0` for a free book. Without this check the app would report
+  a backup from before v1.0.3 as holding an amount for every book.
 
 ## Verification
 
@@ -108,13 +124,15 @@ There is no automated test suite. Changes are verified by:
 1. `npm run build` — must produce both installers without errors. NSIS warnings
    are build errors here, so the custom include has to compile cleanly.
 2. A database script run under Electron's Node (see above) covering the changed
-   queries, including failure paths. The v1.0.4 scripts live in the session
+   queries, including failure paths. The v1.0.5 scripts live in the session
    temp folder: `kpl-db-test.js` (query behaviour),
    `kpl-amount-migration-test.js` (upgrade from an old database file) and
-   `kpl-restore-test.js` (backup and restore).
+   `kpl-restore-test.js` (backup, restore and the restore report).
 3. Driving the packaged app with the Chrome DevTools Protocol
    (`--remote-debugging-port=9222`) to check the real UI, IPC round-trips and
-   console errors.
+   console errors. The restore confirmation of the main process is a native
+   window, so it is answered with a `BM_CLICK` on its **Restore** button
+   (`run-restore-test.ps1`), not with a key stroke.
 
 Electron resolves the user data folder through the Windows known-folder API,
 not through `%APPDATA%`. A UI test therefore has to seed and delete

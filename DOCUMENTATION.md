@@ -123,8 +123,10 @@ Configure the software to match your library's specific needs.
 *   **Borrowing Rules:** Set the borrowing period (e.g., 14 days) and fine amount (e.g., Rs.2/day).
 *   **Backup & Restore:** Use the **Backup** feature daily to protect your data. Store backups on a USB drive.
 *   **Restoring a backup:** Go to **Settings → Backup → Restore from Backup**, pick the backup file and confirm. The software replaces the current data with the backup and restarts. A safety backup of the data that is there now is kept automatically, so nothing is lost for good.
+*   **What the restore did:** After the restart the software shows how many books came back and how many of them have no amount. The message is shown only once.
+*   **A warning before the restore:** The confirmation tells you how many books the backup holds and how many of them have an amount. If the backup was taken with a version that never saved the price, the warning says so, because the amounts you entered now would be replaced by the missing ones.
 *   **Getting back to the last good state:** **Settings → Backup → Restore the newest automatic backup** puts the most recent automatic backup back in place. Use it when something was changed by mistake.
-*   **Books still show "Set amount" after a restore:** The backup was taken with a version that did not save the price, so those amounts are not inside the file. Use **Set amounts** on the Books page to type them in once.
+*   **Books still show "Set amount" after a restore:** The backup was taken with a version that did not save the price, so those amounts are not inside the file. Use **Set amounts** on the Books page to type them in once. The editor saves every amount right away, has a search field and shows how many books are still open.
 
 ---
 

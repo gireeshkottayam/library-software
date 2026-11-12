@@ -32,8 +32,8 @@ It runs fully offline on Windows and keeps all data in a local SQLite database.
 
 Download the latest setup from the releases page and run it:
 
-- `KPL_Setup_v1.0.4.exe` — installer with desktop shortcut
-- `KPL_Portable_v1.0.4.exe` — portable, no installation
+- `KPL_Setup_v1.0.5.exe` — installer with desktop shortcut
+- `KPL_Portable_v1.0.5.exe` — portable, no installation
 
 The setup is a guided installer:
 
@@ -88,7 +88,7 @@ Setup.cs, Uninstall.cs     C# helper installers
 installer.iss              Inno Setup script
 DOCUMENTATION.md           end-user manual
 CHANGELOG.md               version history
-RELEASE_NOTES_v1.0.4.md    notes for the current release
+RELEASE_NOTES_v1.0.5.md    notes for the current release
 ```
 
 `AGENTS.md` describes the architecture, build quirks and verification steps in
@@ -101,6 +101,8 @@ more detail.
   safety backup of the current data first, refuses files that are not library
   backups, and works with backups taken by any version of the app.
 - The newest automatic backup can be restored with one click on the same page.
+- After a restore the app reports what came back and how many books have no
+  amount, and the Books page offers the editor to type them in.
 - Backups are unlimited; prune the `backups` folder if disk use matters.
 - The database path is identical in installed and portable builds, so switching
   between them keeps the same data.
