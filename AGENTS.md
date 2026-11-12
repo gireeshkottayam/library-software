@@ -81,6 +81,25 @@ Runtime data is not in the repository:
   repository. Do not commit them.
 - **Backups on every write** call `performAutoBackup()` in `db.js`. Retention is
   unlimited by design.
+- **The database runs in WAL mode**, so a plain copy of `library.db` can be
+  missing the changes that are still in `library.db-wal`. Every backup
+  therefore checkpoints the log first (`checkpointWal()`), and the manual
+  "Create Backup" uses the SQLite backup API (`db.backup()`). Copying the file
+  by hand is not a backup.
+- **A restore must close the database first.** The old restore copied the
+  backup file over the live database while the connection was still open; the
+  write-ahead log was then checkpointed into the new file when the app closed
+  and the old data came back, so the restore was silently lost.
+  `restoreFromFile()` in `db.js` now closes the connection, removes the `-wal`
+  and `-shm` files, copies the file and reopens the database. If the log files
+  cannot be removed, another program still holds the database and the restore
+  is refused instead of doing something wrong.
+- **The schema has to be re-applied after a restore.** `refreshSchema()` runs
+  the tables, the column migrations, the indexes, the amount migration and the
+  author seeding. The indexes come **after** the columns: an index on a column
+  an old database file does not have makes the whole schema update fail.
+  `ensureAllColumns()` adds any column that is missing, so a backup from any
+  version of the app can be restored.
 
 ## Verification
 
@@ -89,12 +108,17 @@ There is no automated test suite. Changes are verified by:
 1. `npm run build` — must produce both installers without errors. NSIS warnings
    are build errors here, so the custom include has to compile cleanly.
 2. A database script run under Electron's Node (see above) covering the changed
-   queries, including failure paths. The v1.0.3 scripts live in the session
-   temp folder: `kpl-db-test.js` (query behaviour) and
-   `kpl-amount-migration-test.js` (upgrade from an old database file).
+   queries, including failure paths. The v1.0.4 scripts live in the session
+   temp folder: `kpl-db-test.js` (query behaviour),
+   `kpl-amount-migration-test.js` (upgrade from an old database file) and
+   `kpl-restore-test.js` (backup and restore).
 3. Driving the packaged app with the Chrome DevTools Protocol
    (`--remote-debugging-port=9222`) to check the real UI, IPC round-trips and
    console errors.
+
+Electron resolves the user data folder through the Windows known-folder API,
+not through `%APPDATA%`. A UI test therefore has to seed and delete
+`%APPDATA%\kooroppada-library` itself.
 
 Delete `%APPDATA%\kooroppada-library` after UI testing so test data does not
 leak into a real installation.

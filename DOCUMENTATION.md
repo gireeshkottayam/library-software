@@ -122,6 +122,9 @@ Configure the software to match your library's specific needs.
 *   **Library Info:** Set your name, address, and upload the Secretary's signature.
 *   **Borrowing Rules:** Set the borrowing period (e.g., 14 days) and fine amount (e.g., Rs.2/day).
 *   **Backup & Restore:** Use the **Backup** feature daily to protect your data. Store backups on a USB drive.
+*   **Restoring a backup:** Go to **Settings → Backup → Restore from Backup**, pick the backup file and confirm. The software replaces the current data with the backup and restarts. A safety backup of the data that is there now is kept automatically, so nothing is lost for good.
+*   **Getting back to the last good state:** **Settings → Backup → Restore the newest automatic backup** puts the most recent automatic backup back in place. Use it when something was changed by mistake.
+*   **Books still show "Set amount" after a restore:** The backup was taken with a version that did not save the price, so those amounts are not inside the file. Use **Set amounts** on the Books page to type them in once.
 
 ---
 
@@ -130,6 +133,7 @@ Configure the software to match your library's specific needs.
 *   **Books show "Set amount":** The book was added in a version that did not save the price, so the amount is not on record. Use **Set amounts** on the Books page to type it in once.
 *   **WhatsApp disconnected:** Re-scan the QR code in Settings if your phone was offline for too long.
 *   **Database Backup:** If you move the software to a new computer, use the **Restore** feature in Settings to bring back all your data.
+*   **A restore did nothing:** Close the software, open it again and restore the backup once more. A restore is refused while another copy of the software has the database open.
 
 ---
 (c) 2026 Public Library Kooroppada. All rights reserved.

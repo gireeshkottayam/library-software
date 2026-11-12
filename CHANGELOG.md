@@ -2,6 +2,40 @@
 
 All notable changes to the Public Library Kooroppada management system.
 
+## v1.0.4 — 2026-11-12
+
+### Fixed
+
+- **Restoring a backup now works.** The restore copied the backup file over the
+  live database while the database was still open. The database runs in WAL
+  mode, so the write-ahead log was written back into the new file when the app
+  closed and **the old data came back** — the restore was silently lost. The
+  database is closed now, the write-ahead log is removed, the backup is put in
+  place and the schema is applied to it again.
+- **A backup now holds everything.** "Create Backup" copied the database file
+  while it was open, so the copy could be missing the changes that were still
+  in the write-ahead log — the amounts that were just entered, for example.
+  The backup is now written with the SQLite backup API, which includes them.
+  The automatic backups do the same before they are written.
+- **An old backup can be restored again.** A backup from a version before
+  v1.0.2 was missing columns the app needs, and the schema update failed on
+  it. Every missing column is added now, so a backup from any version of the
+  app can be restored.
+- **A wrong file no longer risks the data.** A file that is not a library
+  backup is refused with a clear message, and the current data is kept.
+
+### Added
+
+- **Restore the newest automatic backup.** The Backup page of the Settings has
+  a button that puts the newest file from the automatic backup folder back in
+  place — a quick way back to a known state when something went wrong.
+- A safety backup of the current data is taken before every restore.
+
+### Upgrade notes
+
+- Close the software before restoring a backup.
+- The database stays at `%APPDATA%\kooroppada-library\db\library.db`.
+
 ## v1.0.3 — 2026-11-12
 
 ### Fixed
