@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Plus, Search, Edit2, Trash2, QrCode, X, Download, Heart, Building, User, Camera, Upload, Sparkles, RefreshCw } from 'lucide-react'
 import QRCode from 'qrcode'
 import { useSettings } from '../App.jsx'
@@ -95,6 +95,9 @@ export default function Books() {
   const [memberSearch, setMemberSearch] = useState('')
   const [amountTargets, setAmountTargets] = useState([])
   const [amountEdits, setAmountEdits] = useState({})
+  const [amountSaved, setAmountSaved] = useState({})   // id -> amount that is on record
+  const [amountFilter, setAmountFilter] = useState('')
+  const [amountShown, setAmountShown] = useState(60)
 
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -151,10 +154,41 @@ export default function Books() {
   function openAmountEditor(list) {
     const targets = list || missingAmountBooks
     const edits = {}
-    for (const b of targets) edits[b.id] = ''
+    const saved = {}
+    for (const b of targets) {
+      edits[b.id] = ''
+      saved[b.id] = hasNoAmount(b) ? null : b.price
+    }
     setAmountTargets(targets)
     setAmountEdits(edits)
+    setAmountSaved(saved)
+    setAmountFilter('')
+    setAmountShown(60)
     setModal('amount')
+  }
+
+  // The books of the editor that match the search, and how many of them
+  // already have an amount.
+  const amountFiltered = useMemo(() => {
+    const q = amountFilter.trim().toLowerCase()
+    if (!q) return amountTargets
+    return amountTargets.filter(b =>
+      (b.title || '').toLowerCase().includes(q) ||
+      (b.title_ml || '').toLowerCase().includes(q) ||
+      (b.author || '').toLowerCase().includes(q))
+  }, [amountTargets, amountFilter])
+
+  const amountRecorded = amountTargets.filter(b => amountSaved[b.id] !== null && amountSaved[b.id] !== undefined).length
+
+  // Save one amount right away, so a long session cannot lose the work.
+  async function saveOneAmount(book, value) {
+    const res = await window.api.setBookAmounts([{ id: book.id, price: value }])
+    if (res && res.success) {
+      setAmountSaved(p => ({ ...p, [book.id]: Number(value) }))
+      return true
+    }
+    toast2((res && res.message) || 'Could not save the amount', 'error')
+    return false
   }
 
   async function saveAmounts() {
@@ -665,12 +699,12 @@ export default function Books() {
           <span style={{fontSize:20}}>💰</span>
           <div style={{flex:1, minWidth:220}}>
             <div style={{fontWeight:700}}>
-              <span className="lang-en">{missingAmountBooks.length} book{missingAmountBooks.length===1?' has':'s have'} no amount recorded</span>
-              <span className="lang-ml">{missingAmountBooks.length} പുസ്തകങ്ങളുടെ വില രേഖപ്പെടുത്തിയിട്ടില്ല</span>
+              <span className="lang-en">{missingAmountBooks.length} of {books.length} books have no amount recorded</span>
+              <span className="lang-ml">{books.length} പുസ്തകങ്ങളിൽ {missingAmountBooks.length} പുസ്തകങ്ങളുടെ വില രേഖപ്പെടുത്തിയിട്ടില്ല</span>
             </div>
             <div className="td-muted" style={{fontSize:12}}>
-              <span className="lang-en">Older versions of this app did not save amounts, so they cannot be recovered automatically. Enter them once here and the list shows them immediately.</span>
-              <span className="lang-ml">പഴയ പതിപ്പ് വില സൂക്ഷിച്ചിരുന്നില്ല. ഇവിടെ ഒരിക്കൽ നൽകിയാൽ പട്ടികയിൽ ഉടൻ കാണാം.</span>
+              <span className="lang-en">The amount of these books was never stored, so it is not in the database and not in the old backups either - a restore cannot bring it back. Type each amount once here; it is saved right away and every backup from now on holds it.</span>
+              <span className="lang-ml">ഈ പുസ്തകങ്ങളുടെ വില ഒരിക്കലും സൂക്ഷിച്ചിട്ടില്ല, അതിനാൽ അത് ഡാറ്റാബേസിലും പഴയ ബാക്കപ്പുകളിലും ഇല്ല - തിരിക്കിയാലും ലഭിക്കില്ല. ഓരോ വിലയും ഒരിക്കൽ ഇവിടെ നൽകുക; അത് ഉടൻ സേവ് ആകും, അതിനു ശേഷമുള്ള എല്ലാ ബാക്കപ്പുകളിലും ഉണ്ടാകും.</span>
             </div>
           </div>
           <button className="btn btn--primary" onClick={()=>openAmountEditor(missingAmountBooks)}>
@@ -880,26 +914,56 @@ export default function Books() {
             <div className="modal__body">
               <div className="td-muted" style={{fontSize:12, marginBottom:12, lineHeight:1.5}}>
                 <span className="lang-en">
-                  Older versions of this app never saved the amount, so the original prices cannot be recovered.
-                  Type each amount and press Enter to move to the next book. Type 0 for a free copy; leave a field blank to keep it as “not recorded”.
+                  The amount of these books was never stored, so it cannot be read back from a backup.
+                  Type each amount and press Enter - it is saved right away and the next book is selected.
+                  Type 0 for a free copy; leave a field blank to keep it as “not recorded”.
                 </span>
                 <span className="lang-ml">
-                  പഴയ പതിപ്പ് വില സൂക്ഷിച്ചിരുന്നില്ല. ഓരോ വിലയും നൽകി Enter അമർത്തുക. സൗജന്യ പുസ്തകത്തിന് 0 നൽകുക.
+                  ഈ പുസ്തകങ്ങളുടെ വില ഒരിക്കലും സൂക്ഷിച്ചിട്ടില്ല, അതിനാൽ ബാക്കപ്പിൽ നിന്നും തിരിക്കിയാല് ലഭിക്കില്ല.
+                  ഓരോ വിലയും നൽകി Enter അമർത്തുക - അത് ഉടൻ സേവ് ആകും, അടുത്ത പുസ്തകം തിരഞ്ഞെടുക്കും.
+                  സൗജന്യ പുസ്തകത്തിന് 0 നൽകുക.
                 </span>
               </div>
+
+              {/* Progress and a search, so a library with thousands of books
+                  can be worked through without losing the place. */}
+              <div style={{display:'flex', gap:10, alignItems:'center', marginBottom:10, flexWrap:'wrap'}}>
+                <div style={{
+                  flex:1, minWidth:180, fontSize:12, fontWeight:700, padding:'6px 10px', borderRadius:8,
+                  background:'var(--bg-primary)', border:'1px solid var(--glass-border)'
+                }}>
+                  <span className="lang-en">{amountRecorded} of {amountTargets.length} books have an amount</span>
+                  <span className="lang-ml">{amountTargets.length} പുസ്തകങ്ങളിൽ {amountRecorded} പുസ്തകങ്ങളുടെ വില രേഖപ്പെടുത്തിയിട്ടു്</span>
+                </div>
+                <input
+                  className="form-input"
+                  style={{flex:2, minWidth:160}}
+                  placeholder="Search title or author"
+                  value={amountFilter}
+                  onChange={e => { setAmountFilter(e.target.value); setAmountShown(60) }}
+                />
+              </div>
+
               {amountTargets.length === 0 ? (
                 <div className="td-muted">No books need an amount.</div>
+              ) : amountFiltered.length === 0 ? (
+                <div className="td-muted">No book matches “{amountFilter}”.</div>
               ) : (
-                <div style={{display:'flex', flexDirection:'column', gap:8, maxHeight:'52vh', overflowY:'auto'}}>
-                  {amountTargets.map((b, i) => (
-                    <div key={b.id} style={{display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:8, background:'var(--bg-primary)', border:'1px solid var(--glass-border)'}}>
+                <div style={{display:'flex', flexDirection:'column', gap:8, maxHeight:'46vh', overflowY:'auto'}}>
+                  {amountFiltered.slice(0, amountShown).map((b, i) => {
+                    const onRecord = amountSaved[b.id] !== null && amountSaved[b.id] !== undefined
+                    return (
+                    <div key={b.id} style={{
+                      display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:8,
+                      background:'var(--bg-primary)', border:'1px solid var(--glass-border)'
+                    }}>
                       <div style={{flex:1, minWidth:0}}>
                         <div style={{fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
                           {b.title}{b.volume ? ` (${b.volume})` : ''}
                         </div>
                         <div className="td-muted" style={{fontSize:11, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
                           {b.author || '—'}
-                          {!hasNoAmount(b) && b.price !== '' ? ` · now ${Number(b.price) === 0 ? 'Free' : formatINR(b.price)}` : ''}
+                          {onRecord ? ` · ${Number(amountSaved[b.id]) === 0 ? 'Free' : formatINR(amountSaved[b.id])}` : ''}
                         </div>
                       </div>
                       <input
@@ -909,21 +973,50 @@ export default function Books() {
                         inputMode="decimal"
                         min="0"
                         step="0.01"
-                        autoFocus={i === 0}
-                        placeholder={hasNoAmount(b) ? 'Amount' : (Number(b.price) === 0 ? 'Free' : String(b.price))}
+                        autoFocus={i === 0 && !amountFilter}
+                        placeholder={onRecord ? (Number(amountSaved[b.id]) === 0 ? 'Free' : String(amountSaved[b.id])) : 'Amount'}
                         value={amountEdits[b.id] ?? ''}
                         onChange={e=>setAmountEdits(p=>({...p,[b.id]:e.target.value}))}
-                        onKeyDown={e=>{
+                        onBlur={async e=>{
+                          // A finished field is saved right away, so a long
+                          // session cannot lose the work.
+                          const raw = e.target.value
+                          if (raw === '' || raw == null) return
+                          const value = Number(raw)
+                          if (!Number.isFinite(value) || value < 0) return
+                          await saveOneAmount(b, value)
+                        }}
+                        onKeyDown={async e=>{
                           if (e.key !== 'Enter') return
                           e.preventDefault()
-                          const next = amountTargets[i+1]
+                          const raw = amountEdits[b.id]
+                          if (raw !== '' && raw != null) {
+                            const value = Number(raw)
+                            if (!Number.isFinite(value) || value < 0) {
+                              toast2('Enter a valid amount', 'error')
+                              return
+                            }
+                            await saveOneAmount(b, value)
+                          }
+                          const next = amountFiltered.slice(0, amountShown)[i+1]
                           const el = next ? document.getElementById(`amt-${next.id}`) : null
-                          if (el) el.focus(); else saveAmounts()
+                          if (el) el.focus()
+                          else toast2('All shown books are done')
                         }}
                         style={{width:130, textAlign:'right'}}
                       />
                     </div>
-                  ))}
+                    )
+                  })}
+                  {amountFiltered.length > amountShown && (
+                    <button
+                      className="btn btn--ghost"
+                      style={{marginTop:4}}
+                      onClick={()=>setAmountShown(n=>n+60)}
+                    >
+                      Show more ({amountFiltered.length - amountShown} left)
+                    </button>
+                  )}
                 </div>
               )}
             </div>

@@ -6,7 +6,7 @@ import PhotoCropper from '../components/PhotoCropper.jsx'
 
 export default function Settings() {
   const { user } = useAuth()
-  const { settings, loadSettings, licenseInfo, setActivated } = useSettings()
+  const { settings, loadSettings, licenseInfo, setActivated, language } = useSettings()
   const [searchParams] = useSearchParams()
   const [form, setForm]     = useState({})
   const [saved, setSaved]   = useState(false)
@@ -131,13 +131,9 @@ export default function Settings() {
   }
 
   async function handleRestore() {
-    const ok = confirm(
-      'Restore data from a previous backup file.\n\n' +
-      'This replaces all current books, members, fees and settings, and restarts the app.\n' +
-      'A safety backup of the current data is kept automatically.'
-    )
-    if (!ok) return
-    const res = await window.api.restoreBackup()
+    // The confirmation with the details of the backup is shown by the main
+    // process: only there is it known what the picked file really holds.
+    const res = await window.api.restoreBackup(language)
     if (!res) return
     if (res.success) {
       // The app restarts itself, so this only shows when the restart fails.
@@ -148,13 +144,7 @@ export default function Settings() {
   }
 
   async function handleRestoreLatest() {
-    const ok = confirm(
-      'Restore the newest automatic backup.\n\n' +
-      'This replaces all current books, members, fees and settings, and restarts the app.\n' +
-      'A safety backup of the current data is kept automatically.'
-    )
-    if (!ok) return
-    const res = await window.api.restoreLatestBackup()
+    const res = await window.api.restoreLatestBackup(language)
     if (!res) return
     if (res.success) {
       toast2(`Automatic backup restored: ${res.books} book(s)`, 'success')

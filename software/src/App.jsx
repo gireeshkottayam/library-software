@@ -32,6 +32,7 @@ export default function App() {
   const [language, setLanguage] = useState(localStorage.getItem('lib_lang') || 'en')
   const [activated, setActivated] = useState(null)
   const [licenseInfo, setLicenseInfo] = useState(null)
+  const [restoreReport, setRestoreReport] = useState(null)
 
   useEffect(() => {
     // Safety timeout: if checkLicense takes >10s, unblock the UI
@@ -59,6 +60,23 @@ export default function App() {
   }, [])
 
   useEffect(() => { if (user) loadSettings() }, [user])
+
+  // A restore restarts the software, so the window that started it can no
+  // longer show the result. The result is written to a file next to the
+  // database and shown here, after the restart.
+  useEffect(() => {
+    if (!user) return
+    let cancelled = false
+    window.api.getRestoreReport()
+      .then(report => { if (!cancelled && report) setRestoreReport(report) })
+      .catch(err => console.error('Reading the restore report failed:', err))
+    return () => { cancelled = true }
+  }, [user])
+
+  async function dismissRestoreReport() {
+    setRestoreReport(null)
+    try { await window.api.clearRestoreReport() } catch (err) {}
+  }
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -152,6 +170,64 @@ export default function App() {
         </HashRouter>
         {user?.role === 'superadmin' && !settings.library_name && (
           <OnboardingWizard onComplete={loadSettings} />
+        )}
+        {user && restoreReport && (
+          <div className="modal-overlay" style={{ zIndex: 200 }}>
+            <div className="modal" style={{ maxWidth: 520 }}>
+              <div className="modal__header">
+                <div className="modal__title">
+                  🗄 <span className="lang-en">Backup restored</span>
+                  <span className="lang-ml">ബാക്കപ്പ് തിരിക്കപ്പെടുത്തി</span>
+                </div>
+              </div>
+              <div className="modal__body">
+                <div style={{ fontWeight: 700, marginBottom: 10 }}>
+                  <span className="lang-en">
+                    {restoreReport.books} book{restoreReport.books === 1 ? '' : 's'} are back.
+                  </span>
+                  <span className="lang-ml">
+                    {restoreReport.books} പുസ്തകങ്ങൾ തിരിക്കപ്പെടുത്തി.
+                  </span>
+                </div>
+                {restoreReport.missingAmounts > 0 ? (
+                  <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+                    <span className="lang-en">
+                      {restoreReport.missingAmounts} of them have no amount recorded. The backup was taken
+                      with a version that never saved the price, so the amounts are not inside the file and
+                      no restore can bring them back. Type them in once with
+                      <strong> Set amounts </strong>
+                      on the Books page.
+                    </span>
+                    <span className="lang-ml">
+                      {restoreReport.missingAmounts} പുസ്തകങ്ങളുടെ വില രേഖപ്പെടുത്തിയിട്ടില്ല. ബാക്കപ്പ് എടുത്തപ്പോൾ ഉപയോഗിച്ച പതിപ്പ് വില രേഖപ്പെടുത്തില്ലാത്ത പതിപ്പ് ആണ്, അതിനാൽ വിലകൾ ഫയലിലുള്ളില്ല. പുസ്തക പേജിലെ
+                      <strong> വില നൽകുക </strong>
+                      എന്നതിലൂടെ ഒരിക്കൽ നൽകുക.
+                    </span>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+                    <span className="lang-en">Every book kept its amount. The restore is complete.</span>
+                    <span className="lang-ml">എല്ലാ പുസ്തകങ്ങളുടെയും വില നിലനിൽക്കുന്നു. തിരിക്കൽ പൂർത്തിയായി.</span>
+                  </div>
+                )}
+              </div>
+              <div className="modal__footer">
+                <button className="btn btn--ghost" onClick={dismissRestoreReport}>
+                  <span className="lang-en">Close</span>
+                  <span className="lang-ml">അടയ്ക്കുക</span>
+                </button>
+                {restoreReport.missingAmounts > 0 && (
+                  <button
+                    className="btn btn--primary"
+                    onClick={() => { dismissRestoreReport(); window.location.hash = '#/books' }}
+                  >
+                    <span className="lang-en">Open the Books page</span>
+                    <span className="lang-ml">പുസ്തക പേജ് തുറക്കുക</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
         )}
       </SettingsContext.Provider>
     </AuthContext.Provider>
