@@ -32,8 +32,8 @@ It runs fully offline on Windows and keeps all data in a local SQLite database.
 
 Download the latest setup from the releases page and run it:
 
-- `KPL_Setup_v1.0.6.exe` — installer with desktop shortcut
-- `KPL_Portable_v1.0.6.exe` — portable, no installation
+- `KPL_Setup_v1.0.7.exe` — installer with desktop shortcut
+- `KPL_Portable_v1.0.7.exe` — portable, no installation
 
 The setup is a guided installer:
 
@@ -55,7 +55,9 @@ the newest automatic backup back in place.
 A backup that was taken with an older version of the software holds no book
 amounts. Restoring it does not throw the amounts away: they are looked up in
 the library that was replaced and in the automatic backups, and written back
-into the books that the backup had no amount for.
+into the books that the backup had no amount for. If the amounts are in
+another file, **Settings → Backup → Find the amounts again** looks there as
+well — no restore needed.
 
 Default first-run login: `admin` / `admin123`. Change it after signing in.
 
@@ -93,7 +95,7 @@ Setup.cs, Uninstall.cs     C# helper installers
 installer.iss              Inno Setup script
 DOCUMENTATION.md           end-user manual
 CHANGELOG.md               version history
-RELEASE_NOTES_v1.0.6.md    notes for the current release
+RELEASE_NOTES_v1.0.7.md    notes for the current release
 ```
 
 `AGENTS.md` describes the architecture, build quirks and verification steps in

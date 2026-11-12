@@ -131,8 +131,36 @@ Runtime data is not in the repository:
   exactly one book. Two books with the same key and different amounts make
   the key unusable (`ambiguous`), so no amount can ever be invented. The
   newest source wins, so a price that was corrected later is the one that is
-  used. The number of backup files that are looked at is bounded (300), because
+  used. The number of backup files that are looked at is bounded (1000), because
   the retention of the automatic backups is unlimited.
+- **The recovery is an operation of its own, not a part of the restore.**
+  `recoverMissingAmounts()` does the same work as a restore and can be run at
+  any time, on its own. It is needed because the recovery of v1.0.6 only ran
+  *during* a restore: a librarian whose library was already replaced by a
+  restore could not reach the amounts any more. The places that are looked
+  at, in this order, are the files the librarian named, the library that is
+  there now and the automatic backups (newest first). The report names only
+  the places that really supplied an amount, and says how many places were
+  looked at, so the librarian can tell "nothing was found" from "nothing was
+  looked at".
+- **A price list is read like a database.** A file that is not a `.db` is
+  read as a price list: one book per line, the ISBN or the title of the book
+  and its amount, separated by a comma, a semicolon or a tab
+  (`buildAmountIndexFromList()`). The first line may be a heading, in which
+  case the columns `isbn`, `title`, `author` and `amount` (also `price`,
+  `cost`, `value` and `വില`) are used by their name. Without a heading the
+  amount is the last number of the line. This is the only way to bring back
+  amounts that are in none of the files of the software itself — for example
+  a spreadsheet the librarian kept. The same rules apply as everywhere else:
+  a line that could be two books is never used.
+- **The automatic backups of v1.0.0 and v1.0.1 can be missing the newest
+  changes.** The database has been in WAL mode since v1.0.0, and the old
+  `performAutoBackup()` copied the database file without a WAL checkpoint. In
+  WAL mode a commit goes into `library.db-wal` and only reaches
+  `library.db` at a checkpoint, so those old backups are copies of a state
+  that is up to one checkpoint behind — they can be missing the amounts that
+  were entered last. The checkpoint before every copy (`checkpointWal()`) was
+  added in v1.0.4; keep it.
 - **The recovery fills in every missing amount, also a cleared one.** A book
   whose amount was deliberately cleared in the editor gets the amount back on
   the next restore, because the restore only knows that the amount is missing.
@@ -147,13 +175,15 @@ There is no automated test suite. Changes are verified by:
 1. `npm run build` — must produce both installers without errors. NSIS warnings
    are build errors here, so the custom include has to compile cleanly.
 2. A database script run under Electron's Node (see above) covering the changed
-   queries, including failure paths. The v1.0.6 scripts live in the session
+   queries, including failure paths. The v1.0.7 scripts live in the session
    temp folder: `kpl-db-test.js` (query behaviour),
    `kpl-amount-migration-test.js` (upgrade from an old database file),
-   `kpl-restore-test.js` (backup, restore and the restore report) and
+   `kpl-restore-test.js` (backup, restore and the restore report),
    `kpl-amount-recovery-test.js` (the amounts that are found again after a
    restore, including the backup file of the library that reported the
-   problem).
+   problem), `kpl-amount-recovery-standalone-test.js` (the recovery that
+   runs without a restore, with a file the librarian names) and
+   `kpl-price-list-test.js` (a price list that is read like a database).
 3. Driving the packaged app with the Chrome DevTools Protocol
    (`--remote-debugging-port=9222`) to check the real UI, IPC round-trips and
    console errors. The restore confirmation of the main process is a native

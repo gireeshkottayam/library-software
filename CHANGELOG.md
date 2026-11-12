@@ -2,6 +2,38 @@
 
 All notable changes to the Public Library Kooroppada management system.
 
+## v1.0.7 — 2026-11-12
+
+### Fixed
+
+- **The amounts can be found again without a restore.** The recovery of
+  v1.0.6 only ran while a backup was restored. A library that had already
+  been replaced by a restore — by an older version of the software, or by a
+  restore that was done before the recovery existed — could not reach its
+  amounts any more. **Settings → Backup → Find the amounts again** now does
+  the same work on its own and writes the amounts into the books that have
+  none.
+- **The amounts can be taken from a file the librarian names.** If the
+  amounts are in a backup on a USB stick, in an old copy of the library or in
+  a list the librarian kept, **Take the amounts from another file** looks in
+  that file as well. A library backup (`.db`) and a price list (`.csv`,
+  `.txt`, `.tsv` — one book per line, with its ISBN or title and its amount)
+  are both read. A file that cannot be read is skipped and does not stop the
+  search.
+- **The app says where the amounts were looked for.** The report after a
+  restore and the new panel name every place that supplied an amount, and say
+  how many places were looked at. "Nothing was found" can now be told apart
+  from "nothing was looked at".
+- **More of the automatic backups are looked at.** The search now opens up to
+  1000 of them instead of 300, and stops as soon as every book has an
+  amount.
+
+### Changed
+
+- **The Books page points to the new panel.** The books that still wait for
+  an amount now say where the amounts can be looked for again, instead of
+  only offering the editor.
+
 ## v1.0.6 — 2026-11-12
 
 ### Fixed
