@@ -57,7 +57,7 @@ Both are unsigned; Windows SmartScreen asks for confirmation on first run.
 - Database tests under Electron's Node: price persistence for add/update,
   blank/negative/garbage values, author registration from multi-author strings,
   case-insensitive duplicate detection, similarity suggestions, merge rewriting
-  and de-duplication, per-author book counts. 19 checks passed.
+  and de-duplication, per-author book counts. 21 checks passed.
 - End-to-end UI test against the packaged 1.0.2 build through the Chrome DevTools
   Protocol: author list contents, `+` modal, merge prompt, merge and keep-both
   paths, amount entry, persistence through preload → IPC → SQLite, and the list
