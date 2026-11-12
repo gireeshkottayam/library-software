@@ -50,6 +50,7 @@ module.exports.inspectBackupFile = inspectBackupFile
 module.exports.countAmounts = countAmounts
 module.exports.getRestoreReport = readRestoreReport
 module.exports.clearRestoreReport = clearRestoreReport
+module.exports.recoverMissingAmounts = recoverMissingAmounts
 /**
  * The newest automatic backup file.
  *
@@ -392,43 +393,158 @@ function amountFromIndex(index, book) {
 }
 
 /**
- * Write the amounts that are found back into the books of the restored
- * database.
+ * Write the amounts that are found back into the books that have none.
  *
  * Only the books without an amount are looked at. The sources are tried one
- * after the other, newest first, and a book that got an amount is not looked
- * at again.
+ * after the other, and a book that got an amount is not looked at again, so
+ * the first source that knows a book wins.
  *
- * @param {Iterable<() => Map<string, object>>} sources the sources, newest first
- * @returns {{ recovered: number, missing: number }}
+ * Every source is counted, so the report can say where the amounts came from.
+ *
+ * @param {Array<{ label: string, file?: string, getIndex: () => Map<string, object> }>} sources
+ * @returns {{ recovered: number, missing: number, sources: Array<object> }}
  */
 function recoverAmounts(sources) {
   const rows = db
     .prepare('SELECT id, title, title_ml, author, isbn FROM books WHERE price IS NULL')
     .all()
-  if (!rows.length) return { recovered: 0, missing: 0 }
+  if (!rows.length) return { recovered: 0, missing: 0, sources: [] }
 
   const remaining = new Map(rows.map(row => [row.id, row]))
   const update = db.prepare('UPDATE books SET price=? WHERE id=?')
   let recovered = 0
+  const report = []
 
   const run = db.transaction(() => {
-    for (const getIndex of sources) {
+    for (const source of sources) {
       if (!remaining.size) break
-      const index = getIndex()
-      if (!index.size) continue
+      let index
+      try {
+        index = source.getIndex()
+      } catch (err) {
+        console.error(`Reading the amounts of ${source.label} failed:`, err.message)
+        continue
+      }
+      if (!index || !index.size) continue
+      let used = 0
       for (const [id, book] of remaining) {
         const price = amountFromIndex(index, book)
         if (price === null || price === undefined) continue
         update.run(price, id)
         remaining.delete(id)
+        used++
         recovered++
+      }
+      // Only the places that really supplied an amount are named, so the
+      // report stays short however many files were looked at.
+      if (used > 0) {
+        report.push({
+          label: source.label,
+          file: source.file || null,
+          amounts: index.size,
+          used,
+        })
       }
     }
   })
   run()
 
-  return { recovered, missing: remaining.size }
+  return { recovered, missing: remaining.size, sources: report }
+}
+
+/**
+ * The places the amounts of the books can be found in.
+ *
+ * The order is the order of trust: a file the librarian picked on purpose
+ * comes first, then the library that is there now, then the automatic
+ * backups - one backup is written on every change, so they hold every amount
+ * that was ever entered.
+ *
+ * @param {{ liveIndex?: Map<string, object>|null, extraFiles?: string[], maxFiles?: number }} options
+ * @returns {Array<{ label: string, file?: string, getIndex: () => Map<string, object> }>}
+ */
+function amountSources({ liveIndex = null, extraFiles = [], maxFiles = 1000 } = {}) {
+  const sources = []
+
+  // A file the librarian picked, e.g. a backup on a USB stick.
+  for (const file of extraFiles) {
+    if (!file) continue
+    sources.push({
+      label: path.basename(file),
+      file,
+      getIndex: () => buildAmountIndexFromFile(file),
+    })
+  }
+
+  // The library that is there now. It is the freshest one.
+  if (liveIndex) {
+    sources.push({ label: 'This library', getIndex: () => liveIndex })
+  }
+
+  // The automatic backups, the newest first.
+  const backups = listBackupFiles()
+  const used = Math.min(backups.length, maxFiles)
+  if (backups.length > used) {
+    console.log(`⚠️ Only the newest ${used} of ${backups.length} automatic backups were looked at`)
+  }
+  for (const file of backups.slice(0, used)) {
+    sources.push({
+      label: path.basename(file),
+      file,
+      getIndex: () => buildAmountIndexFromFile(file),
+    })
+  }
+
+  return sources
+}
+
+/**
+ * Find the amounts of the books that have none and write them in.
+ *
+ * This is the same work that a restore does, but it can be run at any time
+ * and on its own - the librarian does not have to restore a backup to get
+ * the amounts back.
+ *
+ * @param {{ files?: string[] }} options files to look in besides the library
+ *   and the automatic backups
+ * @returns {{ books: number, missingBefore: number, recovered: number, missing: number, sources: Array<object>, filesLookedAt: number }}
+ */
+function recoverMissingAmounts(options = {}) {
+  const files = Array.isArray(options.files) ? options.files.filter(Boolean) : []
+  const books = db.prepare('SELECT COUNT(*) AS c FROM books').get().c
+  const missingBefore = db.prepare('SELECT COUNT(*) AS c FROM books WHERE price IS NULL').get().c
+
+  if (missingBefore === 0) {
+    return {
+      books,
+      missingBefore: 0,
+      recovered: 0,
+      missing: 0,
+      sources: [],
+      filesLookedAt: 0,
+      at: new Date().toISOString(),
+    }
+  }
+
+  const sources = amountSources({ liveIndex: buildAmountIndex(db), extraFiles: files })
+  const result = recoverAmounts(sources)
+
+  if (result.recovered > 0) {
+    // The amounts are a change of the library, so they are backed up as well.
+    // The next restore finds them there too.
+    performAutoBackup()
+  }
+
+  console.log(`✅ Amounts found again: ${result.recovered} of ${missingBefore}`)
+  return {
+    books,
+    missingBefore,
+    recovered: result.recovered,
+    missing: result.missing,
+    sources: result.sources,
+    filesLookedAt: sources.length,
+    at: new Date().toISOString(),
+  }
 }
 
 /**
@@ -464,9 +580,10 @@ function listBackupFiles() {
  * automatic backups, and written back into the restored books.
  *
  * @param {string} sourcePath the backup file the user picked
- * @returns {Promise<{ success: boolean, message?: string, books?: number, withAmounts?: number, missingAmounts?: number, recoveredAmounts?: number }>}
+ * @param {string[]} [extraFiles] other files to look in for the amounts
+ * @returns {Promise<{ success: boolean, message?: string, books?: number, withAmounts?: number, missingAmounts?: number, recoveredAmounts?: number, sources?: Array<object> }>}
  */
-async function restoreFromFile(sourcePath) {
+async function restoreFromFile(sourcePath, extraFiles = []) {
   const check = inspectBackupFile(sourcePath)
   if (!check.ok) return { success: false, message: check.message }
 
@@ -518,25 +635,14 @@ async function restoreFromFile(sourcePath) {
     .prepare('SELECT COUNT(*) AS c FROM books WHERE price IS NULL')
     .get().c
   let recovered = 0
+  let sources = []
+  let filesLookedAt = 0
   if (missingBefore > 0) {
-    // The number of files that are looked at is bounded: the retention of the
-    // automatic backups is unlimited, and a library with thousands of them
-    // must not make the restore hang.
-    const MAX_FILES = 300
-    function* sources() {
-      yield () => liveIndex
-      let seen = 0
-      for (const file of listBackupFiles()) {
-        if (seen >= MAX_FILES) {
-          console.log(`⚠️ Only the newest ${MAX_FILES} automatic backups were looked at`)
-          break
-        }
-        seen++
-        yield () => buildAmountIndexFromFile(file)
-      }
-    }
-    const result = recoverAmounts(sources())
+    const allSources = amountSources({ liveIndex, extraFiles })
+    filesLookedAt = allSources.length
+    const result = recoverAmounts(allSources)
     recovered = result.recovered
+    sources = result.sources
     console.log(`✅ Amounts recovered from the library and the backups: ${recovered}`)
     // The recovered amounts are a change of the database, so they are backed
     // up as well. That way they are also found by the next restore.
@@ -559,10 +665,20 @@ async function restoreFromFile(sourcePath) {
     withAmounts,
     missingAmounts,
     recoveredAmounts: recovered,
+    sources,
+    filesLookedAt,
     at: new Date().toISOString(),
   })
 
-  return { success: true, books: check.books, withAmounts, missingAmounts, recoveredAmounts: recovered }
+  return {
+    success: true,
+    books: check.books,
+    withAmounts,
+    missingAmounts,
+    recoveredAmounts: recovered,
+    sources,
+    filesLookedAt,
+  }
 }
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
