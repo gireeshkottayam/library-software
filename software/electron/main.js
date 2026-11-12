@@ -263,10 +263,12 @@ function restoreConfirmText(backup, current, lang) {
   if (backup.missingAmounts > 0) {
     if (ml) {
       lines.push('')
-      lines.push(`ആ പുസ്തകങ്ങളിൽ ${backup.missingAmounts} പുസ്തകങ്ങളുടെ വില രേഖപ്പെടുത്തിയിട്ടില്ല — ബാക്കപ്പ് എടുത്തപ്പോൾ ഉപയോഗിച്ച പതിപ്പ് വില രേഖപ്പെടുത്തില്ലാത്ത പതിപ്പ് ആണ്. ഇപ്പോൾ നിങ്ങൾ ടൈപ്പ് ചെയ്ത വിലകൾ ഈ ബാക്കപ്പിലേക്ക് മാറും.`)
+      lines.push(`ആ പുസ്തകങ്ങളിൽ ${backup.missingAmounts} പുസ്തകങ്ങളുടെ വില രേഖപ്പെടുത്തിയിട്ടില്ല — ബാക്കപ്പ് എടുത്തപ്പോൾ ഉപയോഗിച്ച പതിപ്പ് വില രേഖപ്പെടുത്തില്ലാത്ത പതിപ്പ് ആണ്.`)
+      lines.push('ഇപ്പോൾ നിങ്ങൾ ടൈപ്പ് ചെയ്ത വിലകളും ഓരോ മാറ്റും സേവ് ചെയ്യുന്ന സ്വയം ബാക്കപ്പുകളിലെ വിലകളും തിരിക്കിയ പുസ്തകങ്ങളിലേക്ക് തിരിക്കപ്പെടും. കണ്ടെത്തിയ വിലകൾ മാത്രമാണ് എഴുത്തുക.')
     } else {
       lines.push('')
-      lines.push(`It has no amount for ${backup.missingAmounts} of those books — it was taken with a version that never saved the price. The amounts you entered now will be replaced by them.`)
+      lines.push(`It has no amount for ${backup.missingAmounts} of those books — it was taken with a version that never saved the price.`)
+      lines.push('The amounts you entered now, and the ones in your automatic backups, are looked up for those books and written back into them. Only the ones that are nowhere to be found stay empty.')
     }
   } else if (current.withAmounts > backup.withAmounts) {
     if (ml) {

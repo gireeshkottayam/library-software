@@ -703,8 +703,8 @@ export default function Books() {
               <span className="lang-ml">{books.length} പുസ്തകങ്ങളിൽ {missingAmountBooks.length} പുസ്തകങ്ങളുടെ വില രേഖപ്പെടുത്തിയിട്ടില്ല</span>
             </div>
             <div className="td-muted" style={{fontSize:12}}>
-              <span className="lang-en">The amount of these books was never stored, so it is not in the database and not in the old backups either - a restore cannot bring it back. Type each amount once here; it is saved right away and every backup from now on holds it.</span>
-              <span className="lang-ml">ഈ പുസ്തകങ്ങളുടെ വില ഒരിക്കലും സൂക്ഷിച്ചിട്ടില്ല, അതിനാൽ അത് ഡാറ്റാബേസിലും പഴയ ബാക്കപ്പുകളിലും ഇല്ല - തിരിക്കിയാലും ലഭിക്കില്ല. ഓരോ വിലയും ഒരിക്കൽ ഇവിടെ നൽകുക; അത് ഉടൻ സേവ് ആകും, അതിനു ശേഷമുള്ള എല്ലാ ബാക്കപ്പുകളിലും ഉണ്ടാകും.</span>
+              <span className="lang-en">The amount of these books is not on record. When a backup is restored, the amounts are looked up in your library and in your automatic backups and written back into the books - the books listed here are the ones that were nowhere to be found. Type each amount once; it is saved right away and every backup from now on holds it.</span>
+              <span className="lang-ml">ഈ പുസ്തകങ്ങളുടെ വില രേഖപ്പെടുത്തിയിട്ടില്ല. ബാക്കപ്പ് തിരിക്കുമ്പോൾ നിങ്ങളുടെ ലൈബ്രറിയിലും ഓട്ടോമാറ്റിക് ബാക്കപ്പുകളിലും വിലകൾ തിരിക്കിയെടുത്ത് പുസ്തകങ്ങളിലേക്ക് എഴുത്തുക - ഇവിടെ കാണിക്കുന്നവാണ് എവിടെയും കണ്ടെത്തിയാത്തവ. ഓരോ വിലയും ഒരിക്കൽ നൽകുക; അത് ഉടൻ സേവ് ആകും, അതിനു ശേഷമുള്ള എല്ലാ ബാക്കപ്പുകളിലും ഉണ്ടാകും.</span>
             </div>
           </div>
           <button className="btn btn--primary" onClick={()=>openAmountEditor(missingAmountBooks)}>
@@ -914,12 +914,12 @@ export default function Books() {
             <div className="modal__body">
               <div className="td-muted" style={{fontSize:12, marginBottom:12, lineHeight:1.5}}>
                 <span className="lang-en">
-                  The amount of these books was never stored, so it cannot be read back from a backup.
+                  The amount of these books is not on record.
                   Type each amount and press Enter - it is saved right away and the next book is selected.
                   Type 0 for a free copy; leave a field blank to keep it as “not recorded”.
                 </span>
                 <span className="lang-ml">
-                  ഈ പുസ്തകങ്ങളുടെ വില ഒരിക്കലും സൂക്ഷിച്ചിട്ടില്ല, അതിനാൽ ബാക്കപ്പിൽ നിന്നും തിരിക്കിയാല് ലഭിക്കില്ല.
+                  ഈ പുസ്തകങ്ങളുടെ വില രേഖപ്പെടുത്തിയിട്ടില്ല.
                   ഓരോ വിലയും നൽകി Enter അമർത്തുക - അത് ഉടൻ സേവ് ആകും, അടുത്ത പുസ്തകം തിരഞ്ഞെടുക്കും.
                   സൗജന്യ പുസ്തകത്തിന് 0 നൽകുക.
                 </span>

@@ -189,17 +189,31 @@ export default function App() {
                     {restoreReport.books} പുസ്തകങ്ങൾ തിരിക്കപ്പെടുത്തി.
                   </span>
                 </div>
+                {restoreReport.recoveredAmounts > 0 && (
+                  <div style={{ fontSize: 13, lineHeight: 1.6, marginBottom: 10, padding:'8px 10px', borderRadius:8, background:'var(--bg-primary)' }}>
+                    <span className="lang-en">
+                      ✅ {restoreReport.recoveredAmounts} amount{restoreReport.recoveredAmounts === 1 ? '' : 's'} were
+                      found in your library and in your automatic backups and written back into the books that the
+                      backup had no amount for.
+                    </span>
+                    <span className="lang-ml">
+                      ✅ നിങ്ങളുടെ ലൈബ്രറിയിലും ഓട്ടോമാറ്റിക് ബാക്കപ്പുകളിലും
+                      {restoreReport.recoveredAmounts} വിലകൾ കണ്ടെത്തി, ബാക്കപ്പിൽ വിലയില്ലാത്ത പുസ്തകങ്ങളിലേക്ക്
+                      എഴുത്തിയിരുന്നു.
+                    </span>
+                  </div>
+                )}
                 {restoreReport.missingAmounts > 0 ? (
                   <div style={{ fontSize: 13, lineHeight: 1.6 }}>
                     <span className="lang-en">
-                      {restoreReport.missingAmounts} of them have no amount recorded. The backup was taken
-                      with a version that never saved the price, so the amounts are not inside the file and
-                      no restore can bring them back. Type them in once with
+                      {restoreReport.missingAmounts} of them still have no amount. The backup was taken
+                      with a version that never saved the price, so these amounts are not inside the file and
+                      were nowhere to be found. Type them in once with
                       <strong> Set amounts </strong>
                       on the Books page.
                     </span>
                     <span className="lang-ml">
-                      {restoreReport.missingAmounts} പുസ്തകങ്ങളുടെ വില രേഖപ്പെടുത്തിയിട്ടില്ല. ബാക്കപ്പ് എടുത്തപ്പോൾ ഉപയോഗിച്ച പതിപ്പ് വില രേഖപ്പെടുത്തില്ലാത്ത പതിപ്പ് ആണ്, അതിനാൽ വിലകൾ ഫയലിലുള്ളില്ല. പുസ്തക പേജിലെ
+                      {restoreReport.missingAmounts} പുസ്തകങ്ങളുടെ വില ഇപ്പോഴും രേഖപ്പെടുത്തിയിട്ടില്ല. ബാക്കപ്പ് എടുത്തപ്പോൾ ഉപയോഗിച്ച പതിപ്പ് വില രേഖപ്പെടുത്തില്ലാത്ത പതിപ്പ് ആണ്, അതിനാൽ ആ വിലകൾ ഫയലിലുള്ളില്ല, മറ്റെവിടെയും കണ്ടെത്തിയില്ല. പുസ്തക പേജിലെ
                       <strong> വില നൽകുക </strong>
                       എന്നതിലൂടെ ഒരിക്കൽ നൽകുക.
                     </span>
