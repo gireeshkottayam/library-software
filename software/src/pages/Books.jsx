@@ -703,8 +703,8 @@ export default function Books() {
               <span className="lang-ml">{books.length} പുസ്തകങ്ങളിൽ {missingAmountBooks.length} പുസ്തകങ്ങളുടെ വില രേഖപ്പെടുത്തിയിട്ടില്ല</span>
             </div>
             <div className="td-muted" style={{fontSize:12}}>
-              <span className="lang-en">The amount of these books is not on record. When a backup is restored, the amounts are looked up in your library and in your automatic backups and written back into the books - the books listed here are the ones that were nowhere to be found. Type each amount once; it is saved right away and every backup from now on holds it.</span>
-              <span className="lang-ml">ഈ പുസ്തകങ്ങളുടെ വില രേഖപ്പെടുത്തിയിട്ടില്ല. ബാക്കപ്പ് തിരിക്കുമ്പോൾ നിങ്ങളുടെ ലൈബ്രറിയിലും ഓട്ടോമാറ്റിക് ബാക്കപ്പുകളിലും വിലകൾ തിരിക്കിയെടുത്ത് പുസ്തകങ്ങളിലേക്ക് എഴുത്തുക - ഇവിടെ കാണിക്കുന്നവാണ് എവിടെയും കണ്ടെത്തിയാത്തവ. ഓരോ വിലയും ഒരിക്കൽ നൽകുക; അത് ഉടൻ സേവ് ആകും, അതിനു ശേഷമുള്ള എല്ലാ ബാക്കപ്പുകളിലും ഉണ്ടാകും.</span>
+              <span className="lang-en">The amount of these books is not on record. When a backup is restored, the amounts are looked up in your library and in your automatic backups and written back into the books - the books listed here are the ones that were nowhere to be found. If the amounts are in another file, use <strong> Find the amounts again </strong> in <strong> Settings → Backup </strong>. Otherwise type each amount once; it is saved right away and every backup from now on holds it.</span>
+              <span className="lang-ml">ഈ പുസ്തകങ്ങളുടെ വില രേഖപ്പെടുത്തിയിട്ടില്ല. ബാക്കപ്പ് തിരിക്കുമ്പോൾ നിങ്ങളുടെ ലൈബ്രറിയിലും ഓട്ടോമാറ്റിക് ബാക്കപ്പുകളിലും വിലകൾ തിരിക്കിയെടുത്ത് പുസ്തകങ്ങളിലേക്ക് എഴുത്തുക - ഇവിടെ കാണിക്കുന്നവാണ് എവിടെയും കണ്ടെത്തിയാത്തവ. വിലകൾ മറ്റൊരു ഫയലിൽ ഉണ്ടെങ്കിൽ <strong> Settings → Backup </strong> വിലെ <strong> വിലകൾ വീണ്ടും കണ്ടെത്തുക </strong> എന്നത് ഉപയോഗിക്കുക. അല്ലെങ്കിൽ ഓരോ വിലയും ഒരിക്കൽ നൽകുക; അത് ഉടൻ സേവ് ആകും, അതിനു ശേഷമുള്ള എല്ലാ ബാക്കപ്പുകളിലും ഉണ്ടാകും.</span>
             </div>
           </div>
           <button className="btn btn--primary" onClick={()=>openAmountEditor(missingAmountBooks)}>

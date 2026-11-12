@@ -201,19 +201,31 @@ export default function App() {
                       {restoreReport.recoveredAmounts} വിലകൾ കണ്ടെത്തി, ബാക്കപ്പിൽ വിലയില്ലാത്ത പുസ്തകങ്ങളിലേക്ക്
                       എഴുത്തിയിരുന്നു.
                     </span>
+                    {restoreReport.sources && restoreReport.sources.some(s => s.used > 0) && (
+                      <div className="td-muted" style={{ marginTop: 6, fontSize: 12 }}>
+                        <span className="lang-en">
+                          Found in: {restoreReport.sources.filter(s => s.used > 0).map(s => s.label).join(', ')}
+                        </span>
+                        <span className="lang-ml">
+                          ഇവിടെ കണ്ടെത്തി: {restoreReport.sources.filter(s => s.used > 0).map(s => s.label).join(', ')}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
                 {restoreReport.missingAmounts > 0 ? (
                   <div style={{ fontSize: 13, lineHeight: 1.6 }}>
                     <span className="lang-en">
                       {restoreReport.missingAmounts} of them still have no amount. The backup was taken
-                      with a version that never saved the price, so these amounts are not inside the file and
-                      were nowhere to be found. Type them in once with
+                      with a version that never saved the price, so these amounts are not inside the file.
+                      Use <strong> Find the amounts again </strong> in <strong> Settings → Backup </strong>
+                      to look for them in another file, or type them in once with
                       <strong> Set amounts </strong>
                       on the Books page.
                     </span>
                     <span className="lang-ml">
-                      {restoreReport.missingAmounts} പുസ്തകങ്ങളുടെ വില ഇപ്പോഴും രേഖപ്പെടുത്തിയിട്ടില്ല. ബാക്കപ്പ് എടുത്തപ്പോൾ ഉപയോഗിച്ച പതിപ്പ് വില രേഖപ്പെടുത്തില്ലാത്ത പതിപ്പ് ആണ്, അതിനാൽ ആ വിലകൾ ഫയലിലുള്ളില്ല, മറ്റെവിടെയും കണ്ടെത്തിയില്ല. പുസ്തക പേജിലെ
+                      {restoreReport.missingAmounts} പുസ്തകങ്ങളുടെ വില ഇപ്പോഴും രേഖപ്പെടുത്തിയിട്ടില്ല. ബാക്കപ്പ് എടുത്തപ്പോൾ ഉപയോഗിച്ച പതിപ്പ് വില രേഖപ്പെടുത്തില്ലാത്ത പതിപ്പ് ആണ്, അതിനാൽ ആ വിലകൾ ഫയലിലുള്ളില്ല.
+                      <strong> Settings → Backup </strong> വിലെ <strong> വിലകൾ വീണ്ടും കണ്ടെത്തുക </strong> എന്നത് ഉപയോഗിച്ച് മറ്റൊരു ഫയലിലും നോക്കാം, അല്ലെങ്കിൽ പുസ്തക പേജിലെ
                       <strong> വില നൽകുക </strong>
                       എന്നതിലൂടെ ഒരിക്കൽ നൽകുക.
                     </span>

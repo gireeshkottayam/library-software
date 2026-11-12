@@ -360,6 +360,34 @@ ipcMain.handle('backup-get-path', () => db.getBackupPath())
 ipcMain.handle('backup-get-report', () => db.getRestoreReport())
 ipcMain.handle('backup-clear-report', () => { db.clearRestoreReport(); return { success: true } })
 
+// Look for the amounts of the books that have none and write them in.
+// The librarian does not have to restore a backup to get the amounts back.
+ipcMain.handle('backup-recover-amounts', async () => {
+  try {
+    return { success: true, ...db.recoverMissingAmounts() }
+  } catch (err) {
+    console.error('Finding the amounts again failed:', err)
+    return { success: false, message: err.message }
+  }
+})
+
+// The same, but the librarian names a file to take the amounts from - for
+// example a backup on a USB stick or an old copy of the library.
+ipcMain.handle('backup-recover-amounts-from-file', async () => {
+  const { filePaths } = await dialog.showOpenDialog(mainWindow, {
+    title: 'Take the amounts from this file',
+    filters: [{ name: 'SQLite DB', extensions: ['db'] }],
+    properties: ['openFile'],
+  })
+  if (!filePaths || !filePaths[0]) return { success: false, message: 'cancelled' }
+  try {
+    return { success: true, file: filePaths[0], ...db.recoverMissingAmounts({ files: [filePaths[0]] }) }
+  } catch (err) {
+    console.error('Taking the amounts from the file failed:', err)
+    return { success: false, message: err.message }
+  }
+})
+
 // File dialog for photos
 ipcMain.handle('pick-image', async () => {
   const { filePaths } = await dialog.showOpenDialog(mainWindow, {

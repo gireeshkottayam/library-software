@@ -70,6 +70,8 @@ export default function Settings() {
   }
 
   const [backupPath, setBPath] = useState('')
+  const [amountReport, setAmountReport] = useState(null)
+  const [amountBusy, setAmountBusy] = useState(false)
   async function loadBackupPath() {
     const p = await window.api.getBackupPath()
     setBPath(p)
@@ -150,6 +152,28 @@ export default function Settings() {
       toast2(`Automatic backup restored: ${res.books} book(s)`, 'success')
     } else if (res.message && res.message !== 'cancelled') {
       toast2(`Restore failed: ${res.message}`, 'error')
+    }
+  }
+
+  // Look for the amounts of the books that have none and write them in.
+  // The librarian does not have to restore a backup to get them back.
+  async function handleRecoverAmounts(fromFile) {
+    setAmountBusy(true)
+    try {
+      const res = fromFile
+        ? await window.api.recoverAmountsFromFile()
+        : await window.api.recoverAmounts()
+      if (!res) return
+      if (res.message === 'cancelled') return
+      if (!res.success) { toast2(`Could not look for the amounts: ${res.message}`, 'error'); return }
+      setAmountReport(res)
+      if (res.recovered > 0) toast2(`${res.recovered} amount(s) found again`, 'success')
+      else toast2('No amount was found in the places that were looked at', 'error')
+    } catch (err) {
+      console.error(err)
+      toast2('Looking for the amounts failed', 'error')
+    } finally {
+      setAmountBusy(false)
     }
   }
 
@@ -646,6 +670,59 @@ export default function Settings() {
             <button className="btn" style={{marginTop:12}} onClick={handleRestoreLatest}>
               <Upload size={15}/> Restore the newest automatic backup
             </button>
+          </div>
+
+          {/* Amount recovery */}
+          <div className="card" style={{borderColor:'rgba(99,102,241,0.25)'}}>
+            <div style={{fontWeight:700,fontSize:15,marginBottom:8,color:'var(--accent-light)'}}>
+              <RefreshCw size={16} style={{marginRight:8}}/>Find the amounts again
+            </div>
+            <p style={{color:'var(--text-muted)',fontSize:13,marginBottom:12,lineHeight:1.6}}>
+              A backup from an older version of the software holds no book amounts, so restoring it leaves the
+              books without one. This looks for the amounts that are still on this computer - in this library
+              and in the automatic backups - and writes them into the books that have none. You do not have to
+              restore a backup to use it.
+              <br/><br/>
+              If the amounts are in another file, for example a backup on a USB stick, pick that file and the
+              software will look in it as well.
+            </p>
+            <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+              <button className="btn btn--primary" disabled={amountBusy} onClick={() => handleRecoverAmounts(false)}>
+                <RefreshCw size={15}/> {amountBusy ? 'Looking...' : 'Find the amounts again'}
+              </button>
+              <button className="btn" disabled={amountBusy} onClick={() => handleRecoverAmounts(true)}>
+                <Upload size={15}/> Take the amounts from another file
+              </button>
+            </div>
+
+            {amountReport && (
+              <div style={{marginTop:14,padding:12,borderRadius:8,background:'var(--bg-primary)',fontSize:13,lineHeight:1.6}}>
+                <div style={{marginBottom:6}}>
+                  {amountReport.recovered > 0 ? (
+                    <span style={{color:'var(--green)'}}>
+                      ✅ {amountReport.recovered} amount{amountReport.recovered === 1 ? '' : 's'} found again and written into the books.
+                    </span>
+                  ) : (
+                    <span style={{color:'var(--red)'}}>
+                      No amount was found in the places that were looked at.
+                    </span>
+                  )}
+                </div>
+                <div className="td-muted">
+                  {amountReport.missingBefore > 0
+                    ? `${amountReport.missingBefore} of ${amountReport.books} books had no amount. ${amountReport.missing} still has none.`
+                    : `All ${amountReport.books} books have an amount already.`}
+                </div>
+                {amountReport.sources && amountReport.sources.length > 0 && (
+                  <div className="td-muted" style={{marginTop:6}}>
+                    Found in: {amountReport.sources.filter(s => s.used > 0).map(s => s.label).join(', ')}
+                  </div>
+                )}
+                <div className="td-muted" style={{marginTop:6}}>
+                  {amountReport.filesLookedAt} place{amountReport.filesLookedAt === 1 ? '' : 's'} were looked at: this library and the automatic backups.
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
