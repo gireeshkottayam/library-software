@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+software/node_modules/
+
+# Build output
+dist/
+software/dist/
+software/release/
+software/release-builds/
+software/.builder_cache/
+
+# Local databases, backups and migrated data
+Data/
+software/electron/db/
+*.db
+*.db-shm
+*.db-wal
+
+# Installers, archives and build metadata
+*.exe
+*.msi
+*.zip
+*.7z
+*.blockmap
+RELEASE_V1.0.0/
+INSTALLERS/
+
+# Licence key generation material MUST stay private
+License_Keygen/
+License_Keygen_App/
+KPL_Keygen_Package/
+Keygen_Setup.cs
+keygen_installer.iss
+
+# Third-party checkouts and agent tooling
+everything-claude-code/
+.agent/
+.opencode/
+
+# Logs and generated documents
+*.log
+build_log.txt
+KPL_User_Manual.pdf
