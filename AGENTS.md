@@ -24,6 +24,7 @@ software/
   electron/preload.js    contextBridge surface exposed as window.api
   electron/db.js         schema, migrations, every SQL statement, licence check
   electron/db/           legacy development database (git-ignored)
+  build/installer.nsh    custom NSIS pages (upgrade notice, finish page)
   src/App.jsx            router, settings context, auth gate
   src/pages/             one component per screen
   src/components/        layout, scanners, ID card, onboarding
@@ -55,8 +56,26 @@ Runtime data is not in the repository:
   book's author string, removes duplicates, deletes the source author rows and
   takes an automatic backup. "Keep both" simply inserts the new name.
 - **Amounts** (`books.price`) were never written before v1.0.2, so old rows hold
-  the default `0`. The list now renders `—` for zero and `₹` with Indian digit
-  grouping otherwise.
+  the column default `0`. From v1.0.3 the column is nullable and the meaning is:
+  `NULL` = amount not recorded, `0` = free, `> 0` = the amount. A one-time
+  migration (guarded by the `amount_unknown_migrated` setting) turns the legacy
+  zeros into `NULL` after taking a backup, so an amount the librarian later sets
+  to `0` is never cleared again. `toMoney()` returns `null` for blank or
+  unusable input. The list shows `₹` with Indian digit grouping, `Free` for a
+  zero and a **Set amount** button when nothing is known. The original amounts
+  of books added in 1.0.0/1.0.1 cannot be recovered — the software never stored
+  them.
+- **The installer is a guided (assisted) NSIS installer**, not one-click:
+  `oneClick: false` in `software/package.json` gives the install-mode page, the
+  install-location page and a finish page. `software/build/installer.nsh` is
+  included through `nsis.include` and adds `customInit` (reports a previous
+  installation, found through `INSTALL_REGISTRY_KEY` or the library database)
+  and `customFinishPage` (the "Installation completed successfully" page).
+  Both macros must stay free of `Var` declarations: the uninstaller pass
+  compiles the same include and electron-builder turns NSIS warnings into
+  build errors. NSIS 3 wants the message text **before** the silent-mode
+  switch (`MessageBox MB_OK "text" /SD IDOK`); the other order fails to
+  compile.
 - **Licensing** verifies an Ed25519 signature with the public key embedded in
   `db.js`. The private key and keygen app are deliberately excluded from this
   repository. Do not commit them.
@@ -67,9 +86,12 @@ Runtime data is not in the repository:
 
 There is no automated test suite. Changes are verified by:
 
-1. `npm run build` — must produce both installers without errors.
+1. `npm run build` — must produce both installers without errors. NSIS warnings
+   are build errors here, so the custom include has to compile cleanly.
 2. A database script run under Electron's Node (see above) covering the changed
-   queries, including failure paths.
+   queries, including failure paths. The v1.0.3 scripts live in the session
+   temp folder: `kpl-db-test.js` (query behaviour) and
+   `kpl-amount-migration-test.js` (upgrade from an old database file).
 3. Driving the packaged app with the Chrome DevTools Protocol
    (`--remote-debugging-port=9222`) to check the real UI, IPC round-trips and
    console errors.

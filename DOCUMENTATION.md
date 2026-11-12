@@ -1,5 +1,5 @@
 # Public Library Kooroppada - Comprehensive User Manual
-## End-to-End Operational Guide v1.0.2
+## End-to-End Operational Guide v1.0.3
 
 ---
 
@@ -14,14 +14,25 @@ Welcome to the **Public Library Kooroppada Management System**. This software is
 ---
 
 ## 2. Getting Started
-### 2.1 Activation
+### 2.1 Installing or upgrading
+1.  Close the library software if it is open.
+2.  Run `KPL_Setup_v1.0.3.exe`.
+3.  The setup checks the computer first. If an earlier copy of the software is
+    found, it reports the version and the folder it found and upgrades that
+    copy in place — you never end up with two installations.
+4.  Choose the installation folder (the previous folder is offered again) and
+    click **Install**.
+5.  The last page reads **"Installation completed successfully"** and offers to
+    open the software. Your books, members, fees and settings are preserved.
+
+### 2.2 Activation
 Upon the first launch, the software will enter **Trial Mode**. To activate:
 1.  Navigate to **Settings > License**.
 2.  Copy your **Hardware ID**.
 3.  Send the ID to the Administrator to receive your **Serial Key**.
 4.  Paste the key and click **Activate Now**.
 
-### 2.2 First Login
+### 2.3 First Login
 *   **Default Username:** `admin`
 *   **Default Password:** `admin123`
 *   *Note: Change your password immediately in Settings > Users.*
@@ -43,7 +54,8 @@ The **Books** tab is where you manage your inventory.
 *   **Adding/Editing a Book:** Click `Add New` or click the edit icon on an existing book. Fill in the Title, Title (Malayalam), Author, Translator, Category, ISBN, and Publisher.
 *   **Author Selection:** The **Author** field lists every author already saved in the library. Pick a name from the list instead of retyping it. Use the **+** button beside the field to add a new author without leaving the form.
 *   **Duplicate Author Check:** When a new author name looks like an existing one, the app lists the closest matches with a similarity score. Choose **Merge into** to reuse the existing name (books using the new name are rewritten to it), or **Keep both** to store the names separately.
-*   **Amount:** Enter the book's amount in rupees in the **Amount (₹)** field. The value is saved with the book and shown in the Books list. Leave the field blank when no amount applies. Amounts accept up to two decimal places.
+*   **Amount:** Enter the book's amount in rupees in the **Amount (₹)** field. The value is saved with the book and shown in the Books list. Leave the field blank when the amount is not known, and type `0` for a book that is given away free. Amounts accept up to two decimal places.
+*   **Amounts of books added in older versions:** versions 1.0.0 and 1.0.1 never saved the price, so those amounts cannot be brought back automatically. Such books show a **Set amount** button in the Amount column, and the top of the page shows how many books still miss an amount. Click **Set amounts** to open a list of those books, type the amount of each one and press `Enter` to move to the next book, then press **Save Amounts**. The list shows the amount from then on; a book marked free shows `Free`.
 *   **Translator Field:** Essential for books translated from other languages to Malayalam. The translator's name will display underneath the author in the books table list.
 *   **AI Cover Page Scanner (OCR & Autofill):**
     1. Click the `📸 Auto-Scan Book` button inside the Add Book modal.
@@ -115,6 +127,7 @@ Configure the software to match your library's specific needs.
 
 ## 10. Troubleshooting
 *   **Scanner not working:** Ensure your webcam is connected and the browser has permission to access it.
+*   **Books show "Set amount":** The book was added in a version that did not save the price, so the amount is not on record. Use **Set amounts** on the Books page to type it in once.
 *   **WhatsApp disconnected:** Re-scan the QR code in Settings if your phone was offline for too long.
 *   **Database Backup:** If you move the software to a new computer, use the **Restore** feature in Settings to bring back all your data.
 

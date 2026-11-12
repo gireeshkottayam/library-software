@@ -6,12 +6,13 @@ It runs fully offline on Windows and keeps all data in a local SQLite database.
 ![Electron](https://img.shields.io/badge/Electron-30.5.1-47848F)
 ![React](https://img.shields.io/badge/React-18-61DAFB)
 ![SQLite](https://img.shields.io/badge/SQLite-better--sqlite3-003B57)
-![Version](https://img.shields.io/badge/version-1.0.2-orange)
+![Version](https://img.shields.io/badge/version-1.0.3-orange)
 
 ## Features
 
 - **Books** — add, edit, delete, search; QR labels; cover-page OCR autofill;
-  selectable author list with duplicate detection and merge; manual amount entry.
+  selectable author list with duplicate detection and merge; manual amount entry
+  with a quick editor for books that still miss an amount.
 - **Members** — registration, photos, ID cards, membership fees, status.
 - **Circulation** — issue, renew and return books, overdue tracking, fines.
 - **Fees & payments** — record member payments and library income.
@@ -31,8 +32,15 @@ It runs fully offline on Windows and keeps all data in a local SQLite database.
 
 Download the latest setup from the releases page and run it:
 
-- `KPL_Setup_v1.0.2.exe` — installer with desktop shortcut
-- `KPL_Portable_v1.0.2.exe` — portable, no installation
+- `KPL_Setup_v1.0.3.exe` — installer with desktop shortcut
+- `KPL_Portable_v1.0.3.exe` — portable, no installation
+
+The setup is a guided installer:
+
+- it tells you when a **previous installation is found**, with the version and
+  the folder, and upgrades that installation in place;
+- it ends on an **"Installation completed successfully"** page and offers to
+  open the application.
 
 Existing data is preserved when upgrading. The database lives at:
 
@@ -73,11 +81,12 @@ software/                  Electron + React application
   electron/                main process, preload bridge, SQLite layer
   src/                     renderer (React pages, components, styles)
   public/                  static assets (icon)
+  build/installer.nsh      custom NSIS installer pages (upgrade notice, finish page)
 Setup.cs, Uninstall.cs     C# helper installers
 installer.iss              Inno Setup script
 DOCUMENTATION.md           end-user manual
 CHANGELOG.md               version history
-RELEASE_NOTES_v1.0.2.md    notes for the current release
+RELEASE_NOTES_v1.0.3.md    notes for the current release
 ```
 
 `AGENTS.md` describes the architecture, build quirks and verification steps in
@@ -99,4 +108,4 @@ contains only the public key needed to verify a key.
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md). Current release: **v1.0.2**.
+See [CHANGELOG.md](CHANGELOG.md). Current release: **v1.0.3**.
