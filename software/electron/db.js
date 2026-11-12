@@ -341,6 +341,10 @@ function buildAmountIndex(conn) {
  * @returns {Map<string, { price: number, count: number, ambiguous: boolean, titleKey: string }>}
  */
 function buildAmountIndexFromFile(file) {
+  const ext = path.extname(file).toLowerCase()
+  if (ext !== '.db' && ext !== '.sqlite' && ext !== '.sqlite3') {
+    return buildAmountIndexFromList(file)
+  }
   let conn = null
   try {
     conn = new Database(file, { readonly: true, fileMustExist: true })
@@ -351,6 +355,174 @@ function buildAmountIndexFromFile(file) {
   } finally {
     if (conn) { try { conn.close() } catch (e) {} }
   }
+}
+
+/**
+ * The amounts of a price list, indexed like the live database.
+ *
+ * A price list is a text file with one book per line - the ISBN or the title
+ * of the book and its amount. It is what the librarian exports from a
+ * spreadsheet, and it is the only way to bring back amounts that are not in
+ * any file of the software itself.
+ *
+ * The columns are separated by a comma, a semicolon or a tab. The first line
+ * may be a heading: the columns "isbn", "title", "author" and "amount" (also
+ * "price", "cost", "value" and "വില") are then used by their name. Without a
+ * heading the amount is the last number of the line and the book is named by
+ * the ISBN, or by the first text of the line.
+ *
+ * @param {string} file
+ * @returns {Map<string, { price: number, count: number, ambiguous: boolean, titleKey: string }>}
+ */
+function buildAmountIndexFromList(file) {
+  const index = new Map()
+  let text
+  try {
+    // A list comes out of a spreadsheet, so it may be in UTF-8 with a byte
+    // order mark.
+    text = fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')
+  } catch (err) {
+    console.error(`Reading the price list ${path.basename(file)} failed:`, err.message)
+    return index
+  }
+
+  const add = (key, price, title) => {
+    const entry = index.get(key)
+    if (!entry) {
+      index.set(key, { price, count: 1, ambiguous: false, titleKey: title })
+      return
+    }
+    entry.count += 1
+    // Two lines with the same key and different amounts cannot be told
+    // apart, so the key is not used at all.
+    if (Math.abs(entry.price - price) > 0.001) entry.ambiguous = true
+  }
+
+  const lines = text.split(/\r?\n/).filter(line => line.trim() !== '')
+  if (!lines.length) return index
+
+  // A heading line names the columns.
+  let columns = null
+  const first = splitListRow(lines[0])
+  const header = {}
+  first.forEach((cell, i) => { header[cell.trim().toLowerCase()] = i })
+  const hasHeadings = ['isbn', 'title', 'author', 'amount', 'price', 'cost', 'value', 'വില']
+    .some(name => name in header)
+  if (hasHeadings) {
+    columns = {
+      isbn: 'isbn' in header ? header.isbn : -1,
+      title: 'title' in header ? header.title : -1,
+      author: 'author' in header ? header.author : -1,
+      amount: ['amount', 'price', 'cost', 'value', 'വില'].find(name => name in header) || null,
+    }
+    lines.shift()
+  }
+
+  for (const line of lines) {
+    const cells = splitListRow(line)
+    if (!cells.length) continue
+
+    let isbn = ''
+    let title = ''
+    let author = ''
+    let price = null
+
+    if (columns) {
+      if (columns.amount !== null && columns.amount >= 0) {
+        price = toMoney(cells[columns.amount])
+      }
+      if (columns.isbn >= 0) isbn = cells[columns.isbn] || ''
+      if (columns.title >= 0) title = cells[columns.title] || ''
+      if (columns.author >= 0) author = cells[columns.author] || ''
+      // Without an amount column, the last number of the line is the amount.
+      if (price === null) price = amountOfCells(cells)
+    } else {
+      price = amountOfCells(cells)
+      isbn = cells.find(cell => looksLikeIsbn(cell)) || ''
+      title = cells.find(cell => cell !== isbn && !looksLikeAmount(cell)) || ''
+    }
+
+    if (price === null || price === undefined) continue
+    const key = textKey(title)
+    const isbnKeyValue = isbnKey(isbn)
+    if (!isbnKeyValue && !key) continue
+    if (isbnKeyValue) add('i:' + isbnKeyValue, price, key)
+    if (key) {
+      add('t:' + key, price, key)
+      if (author) add('ta:' + key + '|' + textKey(author), price, key)
+    }
+  }
+
+  return index
+}
+
+/**
+ * Split one line of a price list into its cells.
+ *
+ * @param {string} line
+ * @returns {string[]}
+ */
+function splitListRow(line) {
+  const cells = []
+  let cell = ''
+  let quoted = false
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i]
+    if (char === '"') {
+      quoted = !quoted
+      continue
+    }
+    if (!quoted && (char === ',' || char === ';' || char === '\t')) {
+      cells.push(cell)
+      cell = ''
+      continue
+    }
+    cell += char
+  }
+  cells.push(cell)
+  return cells.map(c => c.trim())
+}
+
+/**
+ * The amount of a row of a price list: the last number of it.
+ *
+ * @param {string[]} cells
+ * @returns {number|null}
+ */
+function amountOfCells(cells) {
+  for (let i = cells.length - 1; i >= 0; i--) {
+    const value = String(cells[i]).replace(/[₹,\s]/g, '').replace(/^[^\d.-]+/, '')
+    if (value === '' || value === '-') continue
+    const money = toMoney(value)
+    if (money !== null) return money
+  }
+  return null
+}
+
+/**
+ * Whether a cell of a price list looks like an ISBN.
+ *
+ * @param {string} cell
+ * @returns {boolean}
+ */
+function looksLikeIsbn(cell) {
+  const cleaned = isbnKey(cell)
+  if (cleaned.length < 8) return false
+  // An ISBN has mostly digits.
+  const digits = cleaned.replace(/[^0-9]/g, '').length
+  return digits >= 8
+}
+
+/**
+ * Whether a cell of a price list is an amount and not a text.
+ *
+ * @param {string} cell
+ * @returns {boolean}
+ */
+function looksLikeAmount(cell) {
+  const cleaned = String(cell).replace(/[₹,\s]/g, '')
+  if (cleaned === '') return false
+  return Number.isFinite(Number(cleaned))
 }
 
 /**

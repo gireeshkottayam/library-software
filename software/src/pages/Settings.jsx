@@ -683,8 +683,10 @@ export default function Settings() {
               and in the automatic backups - and writes them into the books that have none. You do not have to
               restore a backup to use it.
               <br/><br/>
-              If the amounts are in another file, for example a backup on a USB stick, pick that file and the
-              software will look in it as well.
+              If the amounts are in another file, pick that file and the software will look in it as well: a
+              library backup (<code>.db</code>) or a price list exported from a spreadsheet
+              (<code>.csv</code>, <code>.txt</code>). A price list is one book per line, with the ISBN or the
+              title of the book and its amount.
             </p>
             <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
               <button className="btn btn--primary" disabled={amountBusy} onClick={() => handleRecoverAmounts(false)}>

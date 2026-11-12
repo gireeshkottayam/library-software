@@ -372,11 +372,16 @@ ipcMain.handle('backup-recover-amounts', async () => {
 })
 
 // The same, but the librarian names a file to take the amounts from - for
-// example a backup on a USB stick or an old copy of the library.
+// example a backup on a USB stick, an old copy of the library, or a price
+// list that was exported from a spreadsheet.
 ipcMain.handle('backup-recover-amounts-from-file', async () => {
   const { filePaths } = await dialog.showOpenDialog(mainWindow, {
     title: 'Take the amounts from this file',
-    filters: [{ name: 'SQLite DB', extensions: ['db'] }],
+    filters: [
+      { name: 'Library backup or price list', extensions: ['db', 'csv', 'txt', 'tsv'] },
+      { name: 'SQLite DB', extensions: ['db'] },
+      { name: 'Price list', extensions: ['csv', 'txt', 'tsv'] },
+    ],
     properties: ['openFile'],
   })
   if (!filePaths || !filePaths[0]) return { success: false, message: 'cancelled' }
