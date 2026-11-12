@@ -56,17 +56,8 @@ module.exports.clearRestoreReport = clearRestoreReport
  * @returns {string|null} the full path, or null when there is no backup yet
  */
 module.exports.getLatestBackupFile = () => {
-  try {
-    const files = fs.readdirSync(backupDir)
-      .filter(name => name.startsWith('library_backup_') && name.endsWith('.db'))
-      .map(name => path.join(backupDir, name))
-      .map(file => ({ file, time: fs.statSync(file).mtimeMs }))
-      .sort((a, b) => b.time - a.time)
-    return files.length ? files[0].file : null
-  } catch (err) {
-    console.error('Reading the backup folder failed:', err)
-    return null
-  }
+  const files = listBackupFiles()
+  return files.length ? files[0] : null
 }
 /**
  * Close the database connection.
@@ -251,6 +242,214 @@ function clearRestoreReport() {
   }
 }
 
+// ─── Recovering amounts ──────────────────────────────────────────────────────
+//
+// A backup that was taken with a version that never saved the price holds no
+// amounts at all. Restoring it used to leave the librarian with a library
+// where every book said "Set amount", although the amounts were still on the
+// computer: the library that is replaced has them, and every automatic backup
+// holds every amount that was ever entered, because one backup is written on
+// every change.
+//
+// The amounts are looked up in those places and written back into the restored
+// books. A book is recognised by its id and title, by its ISBN, by its title
+// and author, and last by a title that is on exactly one book. A match that
+// could be more than one book is never used, so no amount can be invented.
+
+/** The ISBN of a book, without spaces and dashes, in upper case. */
+function isbnKey(value) {
+  if (value === '' || value == null) return ''
+  return String(value).replace(/[^0-9A-Za-z]/g, '').toUpperCase()
+}
+
+/** A text of a book, in lower case and with single spaces. */
+function textKey(value) {
+  if (value === '' || value == null) return ''
+  return String(value).trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+/**
+ * Whether a database knows what an amount of 0 means.
+ *
+ * A file that was taken before v1.0.3 has the column default 0 for every
+ * book. That 0 means "not recorded", not "free". The amount migration sets
+ * `amount_unknown_migrated`, so a file that has it stores a real 0.
+ *
+ * @param {import('better-sqlite3').Database} conn
+ * @returns {boolean}
+ */
+function knowsFreeAmounts(conn) {
+  try {
+    return !!conn.prepare("SELECT value FROM settings WHERE key='amount_unknown_migrated'").get()
+  } catch (err) {
+    // A file without a settings table is an old one.
+    return false
+  }
+}
+
+/**
+ * The amounts of a database, indexed by the ways a book can be recognised.
+ *
+ * @param {import('better-sqlite3').Database} conn
+ * @returns {Map<string, { price: number, count: number, ambiguous: boolean, titleKey: string }>}
+ */
+function buildAmountIndex(conn) {
+  const index = new Map()
+  const free = knowsFreeAmounts(conn)
+  let rows
+  try {
+    rows = conn.prepare('SELECT id, title, title_ml, author, isbn, price FROM books').all()
+  } catch (err) {
+    return index
+  }
+  const add = (key, price, title) => {
+    const entry = index.get(key)
+    if (!entry) {
+      index.set(key, { price, count: 1, ambiguous: false, titleKey: title })
+      return
+    }
+    entry.count += 1
+    // Two books with the same key and different amounts cannot be told
+    // apart, so the key is not used at all.
+    if (Math.abs(entry.price - price) > 0.001) entry.ambiguous = true
+  }
+  for (const book of rows) {
+    if (book.price === null || book.price === undefined) continue
+    // In a file that never knew about the amount, a 0 is the column default
+    // and not a price.
+    if (!free && !(book.price > 0)) continue
+    const price = Number(book.price)
+    const title = textKey(book.title)
+    const author = textKey(book.author)
+    add('id:' + book.id, price, title)
+    const isbn = isbnKey(book.isbn)
+    if (isbn) add('i:' + isbn, price, title)
+    add('ta:' + title + '|' + author, price, title)
+    add('t:' + title, price, title)
+    const titleMl = textKey(book.title_ml)
+    if (titleMl) add('tm:' + titleMl + '|' + author, price, title)
+  }
+  return index
+}
+
+/**
+ * The amounts of a backup file, indexed like the live database.
+ * A file that cannot be opened is skipped.
+ *
+ * @param {string} file
+ * @returns {Map<string, { price: number, count: number, ambiguous: boolean, titleKey: string }>}
+ */
+function buildAmountIndexFromFile(file) {
+  let conn = null
+  try {
+    conn = new Database(file, { readonly: true, fileMustExist: true })
+    return buildAmountIndex(conn)
+  } catch (err) {
+    console.error(`Reading the amounts of ${path.basename(file)} failed:`, err.message)
+    return new Map()
+  } finally {
+    if (conn) { try { conn.close() } catch (e) {} }
+  }
+}
+
+/**
+ * The amount of a book in an index, or null when the index does not hold it.
+ *
+ * The order of the ways is from the safest to the least safe one. A book
+ * with the same id and the same title is the same book; the ISBN is the one
+ * thing that never changes; the title with the author is nearly as good; and
+ * a title on its own is only used when it is on exactly one book.
+ *
+ * @param {Map<string, { price: number, count: number, ambiguous: boolean, titleKey: string }>} index
+ * @param {{ id: number, title: string, title_ml: string, author: string, isbn: string }} book
+ * @returns {number|null}
+ */
+function amountFromIndex(index, book) {
+  const byId = index.get('id:' + book.id)
+  if (byId && !byId.ambiguous && byId.titleKey === textKey(book.title)) return byId.price
+
+  const isbn = isbnKey(book.isbn)
+  if (isbn) {
+    const entry = index.get('i:' + isbn)
+    if (entry && !entry.ambiguous) return entry.price
+  }
+
+  const title = textKey(book.title)
+  const author = textKey(book.author)
+  const byTitle = index.get('ta:' + title + '|' + author)
+  if (byTitle && !byTitle.ambiguous) return byTitle.price
+
+  const titleMl = textKey(book.title_ml)
+  if (titleMl) {
+    const byTitleMl = index.get('tm:' + titleMl + '|' + author)
+    if (byTitleMl && !byTitleMl.ambiguous) return byTitleMl.price
+  }
+
+  const onlyTitle = index.get('t:' + title)
+  if (onlyTitle && !onlyTitle.ambiguous && onlyTitle.count === 1) return onlyTitle.price
+
+  return null
+}
+
+/**
+ * Write the amounts that are found back into the books of the restored
+ * database.
+ *
+ * Only the books without an amount are looked at. The sources are tried one
+ * after the other, newest first, and a book that got an amount is not looked
+ * at again.
+ *
+ * @param {Iterable<() => Map<string, object>>} sources the sources, newest first
+ * @returns {{ recovered: number, missing: number }}
+ */
+function recoverAmounts(sources) {
+  const rows = db
+    .prepare('SELECT id, title, title_ml, author, isbn FROM books WHERE price IS NULL')
+    .all()
+  if (!rows.length) return { recovered: 0, missing: 0 }
+
+  const remaining = new Map(rows.map(row => [row.id, row]))
+  const update = db.prepare('UPDATE books SET price=? WHERE id=?')
+  let recovered = 0
+
+  const run = db.transaction(() => {
+    for (const getIndex of sources) {
+      if (!remaining.size) break
+      const index = getIndex()
+      if (!index.size) continue
+      for (const [id, book] of remaining) {
+        const price = amountFromIndex(index, book)
+        if (price === null || price === undefined) continue
+        update.run(price, id)
+        remaining.delete(id)
+        recovered++
+      }
+    }
+  })
+  run()
+
+  return { recovered, missing: remaining.size }
+}
+
+/**
+ * The automatic backup files, the newest first.
+ *
+ * @returns {string[]}
+ */
+function listBackupFiles() {
+  try {
+    return fs.readdirSync(backupDir)
+      .filter(name => name.startsWith('library_backup_') && name.endsWith('.db'))
+      .map(name => path.join(backupDir, name))
+      .map(file => ({ file, time: fs.statSync(file).mtimeMs }))
+      .sort((a, b) => b.time - a.time)
+      .map(entry => entry.file)
+  } catch (err) {
+    console.error('Reading the backup folder failed:', err)
+    return []
+  }
+}
+
 /**
  * Replace the live database with a backup file.
  *
@@ -260,12 +459,20 @@ function clearRestoreReport() {
  * was silently lost. The database is closed now, the write-ahead log is
  * removed and the schema is applied to the restored file again.
  *
+ * A backup that holds no amount does not take the amounts of the library
+ * away: they are looked up in the library that is replaced and in the
+ * automatic backups, and written back into the restored books.
+ *
  * @param {string} sourcePath the backup file the user picked
- * @returns {Promise<{ success: boolean, message?: string, books?: number, missingAmounts?: number }>}
+ * @returns {Promise<{ success: boolean, message?: string, books?: number, withAmounts?: number, missingAmounts?: number, recoveredAmounts?: number }>}
  */
 async function restoreFromFile(sourcePath) {
   const check = inspectBackupFile(sourcePath)
   if (!check.ok) return { success: false, message: check.message }
+
+  // The amounts of the library that is about to be replaced. They are the
+  // freshest ones and are looked up first.
+  const liveIndex = buildAmountIndex(db)
 
   // A safety copy of the current data, so a restore can be undone.
   performAutoBackup()
@@ -304,6 +511,38 @@ async function restoreFromFile(sourcePath) {
   db = new Database(dbPath)
   refreshSchema()
 
+  // A backup that holds no amount must not take the amounts away. They are
+  // looked up in the library that was replaced and in the automatic backups,
+  // which hold every amount that was ever entered.
+  const missingBefore = db
+    .prepare('SELECT COUNT(*) AS c FROM books WHERE price IS NULL')
+    .get().c
+  let recovered = 0
+  if (missingBefore > 0) {
+    // The number of files that are looked at is bounded: the retention of the
+    // automatic backups is unlimited, and a library with thousands of them
+    // must not make the restore hang.
+    const MAX_FILES = 300
+    function* sources() {
+      yield () => liveIndex
+      let seen = 0
+      for (const file of listBackupFiles()) {
+        if (seen >= MAX_FILES) {
+          console.log(`⚠️ Only the newest ${MAX_FILES} automatic backups were looked at`)
+          break
+        }
+        seen++
+        yield () => buildAmountIndexFromFile(file)
+      }
+    }
+    const result = recoverAmounts(sources())
+    recovered = result.recovered
+    console.log(`✅ Amounts recovered from the library and the backups: ${recovered}`)
+    // The recovered amounts are a change of the database, so they are backed
+    // up as well. That way they are also found by the next restore.
+    if (recovered > 0) performAutoBackup()
+  }
+
   const missingAmounts = db
     .prepare('SELECT COUNT(*) AS c FROM books WHERE price IS NULL')
     .get().c
@@ -319,10 +558,11 @@ async function restoreFromFile(sourcePath) {
     books: check.books,
     withAmounts,
     missingAmounts,
+    recoveredAmounts: recovered,
     at: new Date().toISOString(),
   })
 
-  return { success: true, books: check.books, withAmounts, missingAmounts }
+  return { success: true, books: check.books, withAmounts, missingAmounts, recoveredAmounts: recovered }
 }
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
