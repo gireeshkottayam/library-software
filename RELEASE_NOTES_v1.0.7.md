@@ -125,8 +125,8 @@ Two more findings that matter for the recovery:
 
 | File | Size | SHA-256 |
 | --- | --- | --- |
-| `KPL_Setup_v1.0.7.exe` | filled in after the build | |
-| `KPL_Portable_v1.0.7.exe` | filled in after the build | |
+| `KPL_Setup_v1.0.7.exe` | 110,397,872 bytes | `2E8FDDD484F80C44964A5FD2E56419CC7449E42717457A9CF18B2FE484034AD1` |
+| `KPL_Portable_v1.0.7.exe` | 110,117,315 bytes | `5F39FBC617D383FC8B300A73647D6E8336A77A30896F330A8C22E0E2E5B68A4E` |
 
 Both are unsigned; Windows SmartScreen asks for confirmation on first run.
 
