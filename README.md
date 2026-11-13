@@ -32,8 +32,8 @@ It runs fully offline on Windows and keeps all data in a local SQLite database.
 
 Download the latest setup from the releases page and run it:
 
-- `KPL_Setup_v1.0.7.exe` — installer with desktop shortcut
-- `KPL_Portable_v1.0.7.exe` — portable, no installation
+- `KPL_Setup_v1.0.8.exe` — installer with desktop shortcut
+- `KPL_Portable_v1.0.8.exe` — portable, no installation
 
 The setup is a guided installer:
 
@@ -95,7 +95,7 @@ Setup.cs, Uninstall.cs     C# helper installers
 installer.iss              Inno Setup script
 DOCUMENTATION.md           end-user manual
 CHANGELOG.md               version history
-RELEASE_NOTES_v1.0.7.md    notes for the current release
+RELEASE_NOTES_v1.0.8.md    notes for the current release
 ```
 
 `AGENTS.md` describes the architecture, build quirks and verification steps in
@@ -110,6 +110,11 @@ more detail.
 - The newest automatic backup can be restored with one click on the same page.
 - After a restore the app reports what came back and how many books have no
   amount, and the Books page offers the editor to type them in.
+- The books that have no amount can be written into a list (**Export the
+  books without an amount**): fill in the Amount column of the list in a
+  spreadsheet, give the file back with **Take the amounts from another
+  file**, and the amounts are written into the books. This is the way to get
+  the prices in when they are in no file of the software.
 - Backups are unlimited; prune the `backups` folder if disk use matters.
 - The database path is identical in installed and portable builds, so switching
   between them keeps the same data.

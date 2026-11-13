@@ -2,6 +2,38 @@
 
 All notable changes to the Public Library Kooroppada management system.
 
+## v1.0.8 — 2026-11-13
+
+### Fixed
+
+- **The Amount field is a field to write the amount into.** It was a number
+  field of the browser, so it showed the step buttons and it stepped through
+  the values when the arrow keys were pressed. It is now a plain field that
+  takes the number the way it is read — "250" or "250.50" — with the number
+  pad of the phone.
+- **A field that does not hold a number is no longer saved as 0.** A stray
+  letter in the amount became the amount 0 of a free book, because an
+  unusable value used to become 0. The app now refuses it and says that the
+  amount must be a number. The same is true of the amount editor of the
+  Books page.
+- **No number field shows the step buttons any more.** The year and the
+  stock of a book keep their number field, but without the arrows.
+- **A message is no longer taken away by the message before it.** The timer
+  of the old message could clear a new one, so a message that said a number
+  was wrong could disappear before it was read.
+
+### Added
+
+- **The books without an amount can be written into a list.** This is the
+  way out when the amount of a book is in no file of the software. The list
+  holds the ISBN, the title, the author and an empty Amount column. Fill in
+  the column in a spreadsheet, give the file back with **Take the amounts
+  from another file**, and the amounts are written into the books that
+  belong to them. The button is on the Books page, in the banner of the
+  books that have no amount, and in **Settings → Backup**.
+- **The version of the app is shown** at the bottom of the side bar, so that
+  the build on the computer can be named.
+
 ## v1.0.7 — 2026-11-12
 
 ### Fixed

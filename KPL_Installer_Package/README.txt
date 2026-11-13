@@ -1,4 +1,4 @@
-﻿KPL Library Management System - v1.0.7
+KPL Library Management System - v1.0.8
 Public Library Kooroppada
 =========================================
 
@@ -6,7 +6,7 @@ INSTALLATION INSTRUCTIONS
 --------------------------
 
 Option 1: Standard Installer (Recommended)
-  Run: KPL_Setup_v1.0.7.exe
+  Run: KPL_Setup_v1.0.8.exe
   The setup shows a few pages:
     - it tells you if a previous copy of the software is already on this
       computer (with its version and folder) and upgrades that copy in place;
@@ -16,11 +16,36 @@ Option 1: Standard Installer (Recommended)
   A desktop shortcut is created.
 
 Option 2: Portable Version
-  Run: KPL_Portable_v1.0.7.exe
+  Run: KPL_Portable_v1.0.8.exe
   No installation needed. Runs from any folder.
 
-WHAT IS NEW IN v1.0.7
+WHAT IS NEW IN v1.0.8
 ---------------------
+* THE AMOUNT FIELD IS A FIELD YOU WRITE THE AMOUNT INTO.
+  The "Amount (Rs.)" field of the Add Book window was a number field of the
+  browser, so it showed the little step buttons on the right and it stepped
+  through the values when the arrow keys were pressed. It is now a plain
+  field: the amount is written the way it is read - 250 or 250.50 - and the
+  phone shows a number pad. The year and the stock of a book show no step
+  buttons either.
+* A MISTAKE IN THE FIELD IS NO LONGER SAVED AS 0.
+  0 means "this book is free". Before, a stray letter in the amount became
+  0, so a mistake could quietly change the value of a book. Now the software
+  refuses it and says that the amount must be a number, 0 or more.
+* THE BOOKS WITHOUT AN AMOUNT CAN BE WRITTEN INTO A LIST.
+  This is the way out when the price of a book is in no file of the software:
+    1. On the Books page, press "Export the missing amounts" (or use
+       Settings > Backup > "Export the books without an amount").
+    2. The list holds the ISBN, the title, the author and an empty Amount
+       column. Open it in a spreadsheet and fill in the Amount column.
+    3. Save the file and give it back with "Take the amounts from another
+       file".
+    4. The amounts are written into the books that belong to them.
+* THE VERSION OF THE APP IS SHOWN at the bottom of the side bar.
+* A MESSAGE IS NO LONGER TAKEN AWAY BY THE MESSAGE BEFORE IT.
+
+FROM v1.0.7
+-----------
 * FIND THE AMOUNTS AGAIN - WITHOUT RESTORING A BACKUP.
   A backup that was taken with an older version of the software holds no book
   amounts. When such a backup is restored, the software looks for the amounts
@@ -74,7 +99,7 @@ UPGRADE INSTRUCTIONS (IMPORTANT)
 ---------------------------------
 If you already have the software installed:
   1. Close the library software BEFORE running the installer.
-  2. Run KPL_Setup_v1.0.7.exe to upgrade.
+  2. Run KPL_Setup_v1.0.8.exe to upgrade.
   3. The setup detects the installed copy and upgrades it in place.
   4. Your data and configurations will be PRESERVED automatically.
   5. DO NOT manually delete the installed folder before upgrading.
@@ -87,7 +112,12 @@ HOW TO GET YOUR BOOK AMOUNTS BACK
 4. If it says that nothing was found, press "Take the amounts from another
    file" and pick the file that holds your prices (a backup on the USB
    stick, or the copy of the library from before the restore).
-5. Books that are still empty afterwards are the ones whose price was never
+5. If the prices are in no file at all, press "Export the books without an
+   amount". The list holds the ISBN, the title, the author and an empty
+   Amount column. Fill in the Amount column of the list in your spreadsheet,
+   save the file, and give it back with "Take the amounts from another
+   file".
+6. Books that are still empty afterwards are the ones whose price was never
    entered and is in no file. Type those in once with "Set amounts" on the
    Books page.
 

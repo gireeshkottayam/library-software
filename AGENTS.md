@@ -167,6 +167,34 @@ Runtime data is not in the repository:
   This is the trade-off of the automatic recovery: it is meant to bring back
   what a restore would otherwise throw away, and the report after the restart
   says how many amounts were written back.
+- **The amount field is a plain text field.** The librarian asked for a field
+  the amount is written into, not a stepper. The field is `type="text"` with
+  `inputMode="decimal"`, and the number is read by `parseAmount()` in
+  `Books.jsx`: only digits and one dot are accepted, and a field that does
+  not hold a number is refused with a message. It must never become the
+  amount `0` of a free book — that was what `Number(value) || 0` did with a
+  stray letter. The step buttons of the browser are taken away in
+  `index.css`, so the number fields that stay (the year, the stock) show no
+  arrows either.
+- **The books without an amount can be written into a list.**
+  `writeAmountList()` in `db.js` writes them as a price list: the ISBN, the
+  title, the author and an empty Amount column. The librarian fills in the
+  column in a spreadsheet and gives the file back with "Take the amounts
+  from another file", which reads it with `buildAmountIndexFromList()`. The
+  two are one round trip, so the format of the list and the format of the
+  reader must stay the same: a cell with a comma or a quote is quoted, a
+  quote inside it is written twice, and the file starts with a byte order
+  mark.
+- **A message must not be taken away by the timer of the message before
+  it.** `toast2()` keeps its timer in a ref and clears the old one. Without
+  that, a message that said a number was wrong could disappear before it
+  was read.
+- **`electron.exe` is a program with a window, so PowerShell does not wait
+  for it.** A test script that is called with `&` keeps running in the
+  background while the script that called it moves on — the output arrives
+  later, and a file can be gone by the time the script reads it. Put the
+  call in a pipeline, or use `Start-Process -Wait -NoNewWindow -PassThru`
+  and look at the exit code.
 
 ## Verification
 
@@ -175,20 +203,25 @@ There is no automated test suite. Changes are verified by:
 1. `npm run build` — must produce both installers without errors. NSIS warnings
    are build errors here, so the custom include has to compile cleanly.
 2. A database script run under Electron's Node (see above) covering the changed
-   queries, including failure paths. The v1.0.7 scripts live in the session
+   queries, including failure paths. The v1.0.8 scripts live in the session
    temp folder: `kpl-db-test.js` (query behaviour),
    `kpl-amount-migration-test.js` (upgrade from an old database file),
    `kpl-restore-test.js` (backup, restore and the restore report),
    `kpl-amount-recovery-test.js` (the amounts that are found again after a
    restore, including the backup file of the library that reported the
    problem), `kpl-amount-recovery-standalone-test.js` (the recovery that
-   runs without a restore, with a file the librarian names) and
-   `kpl-price-list-test.js` (a price list that is read like a database).
+   runs without a restore, with a file the librarian names),
+   `kpl-price-list-test.js` (a price list that is read like a database),
+   `kpl-amount-list-test.js` (the list of the books without an amount, and
+   the way back) and `kpl-read-list-test.js` (a list that the app wrote is
+   read again and finds its books).
 3. Driving the packaged app with the Chrome DevTools Protocol
    (`--remote-debugging-port=9222`) to check the real UI, IPC round-trips and
    console errors. The restore confirmation of the main process is a native
    window, so it is answered with a `BM_CLICK` on its **Restore** button
-   (`run-restore-test.ps1`), not with a key stroke.
+   (`run-restore-test.ps1`), not with a key stroke. The save window of the
+   list of the books without an amount is answered the same way, with a
+   `BM_CLICK` on its **Save** button (`run-export-test.ps1`).
 
 Electron resolves the user data folder through the Windows known-folder API,
 not through `%APPDATA%`. A UI test therefore has to seed and delete
