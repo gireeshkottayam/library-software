@@ -90,8 +90,8 @@ So the way the amounts get into the library is one of these:
 
 | File | Size | SHA-256 |
 | --- | --- | --- |
-| `KPL_Setup_v1.0.8.exe` | filled in after the build | |
-| `KPL_Portable_v1.0.8.exe` | filled in after the build | |
+| `KPL_Setup_v1.0.8.exe` | 110,399,797 bytes | `75DB5ED859EACFD10A827582435FFB8C8AB5A282CE8EA3B340B49099021794DB` |
+| `KPL_Portable_v1.0.8.exe` | 110,119,240 bytes | `8A905C76855599DBA16520EB4AA295325700C42B9ED5354831482B1C00D58B26` |
 
 Both are unsigned; Windows SmartScreen asks for confirmation on first run.
 
