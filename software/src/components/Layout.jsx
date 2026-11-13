@@ -11,11 +11,18 @@ export default function Layout() {
   const { settings, language } = useSettings()
   const navigate = useNavigate()
   const [overdueCount, setOverdueCount] = useState(0)
+  // The version of the app on this computer. It is shown at the bottom of
+  // the side bar, so that the librarian can say which build is running.
+  const [version, setVersion] = useState('')
 
   useEffect(() => {
     loadOverdue()
     const t = setInterval(loadOverdue, 60000)
     return () => clearInterval(t)
+  }, [])
+
+  useEffect(() => {
+    window.api.getVersion().then(setVersion).catch(() => {})
   }, [])
 
   async function loadOverdue() {
@@ -93,6 +100,7 @@ export default function Layout() {
             </div>
             <div className="app-footer">
               Developed by Girish Kottayam
+              {version ? <span> · v{version}</span> : null}
             </div>
           </div>
         </aside>

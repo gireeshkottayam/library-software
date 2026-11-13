@@ -368,6 +368,20 @@ tbody td {
   border-color: var(--accent); border-bottom-width: 2px; padding-bottom: 5px; /* Fluent UI style bottom border on focus */
 }
 .form-input::placeholder { color: var(--text-subtle); }
+/* The browser draws a small step button on every number field. It takes the
+   place of the text, and it is of no use in a form that is filled in with a
+   keyboard - so it is taken away. */
+.form-input[type="number"] {
+  -moz-appearance: textfield;
+  -ms-appearance: textfield;
+  appearance: textfield;
+}
+.form-input[type="number"]::-webkit-outer-spin-button,
+.form-input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
 
 /* ── Search Bar ── */
 .search-bar {
