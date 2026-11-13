@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Save, Shield, Download, Upload, Plus, Trash2, User, RefreshCw, CheckCircle, Key, ShieldAlert, Image as ImageIcon } from 'lucide-react'
 import { useAuth, useSettings } from '../App.jsx'
 import { useSearchParams } from 'react-router-dom'
@@ -72,6 +72,7 @@ export default function Settings() {
   const [backupPath, setBPath] = useState('')
   const [amountReport, setAmountReport] = useState(null)
   const [amountBusy, setAmountBusy] = useState(false)
+  const toastTimer = useRef(null)
   async function loadBackupPath() {
     const p = await window.api.getBackupPath()
     setBPath(p)
@@ -81,7 +82,12 @@ export default function Settings() {
     const u = await window.api.getUsers(); setUsers(u)
   }
 
-  function toast2(msg, type='success') { setToast({msg,type}); setTimeout(()=>setToast(null),3000) }
+  function toast2(msg, type='success') {
+    setToast({msg,type})
+    // The timer of the message before must not clear this one.
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(()=>setToast(null),3000)
+  }
   function hc(e) { setForm(p=>({...p,[e.target.name]:e.target.value})) }
 
   function handleSig(e) {

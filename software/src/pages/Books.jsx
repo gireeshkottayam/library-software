@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Plus, Search, Edit2, Trash2, QrCode, X, Download, Heart, Building, User, Camera, Upload, Sparkles, RefreshCw } from 'lucide-react'
 import QRCode from 'qrcode'
 import { useSettings } from '../App.jsx'
@@ -79,6 +79,7 @@ export default function Books() {
   const [qrImg, setQrImg]     = useState('')
   const [filterCat, setFilterCat] = useState('')
   const [toast, setToast]     = useState(null)
+  const toastTimer            = useRef(null)
   const form0 = { title:'',title_ml:'',author:'',translator:'',category:'',publisher:'',isbn:'',edition:'',volume:'',year:'',language:'Malayalam',shelf_no:'',qr_code_no:'',total_copies:1,condition:'Good',description:'',price:'' }
   const [form, setForm] = useState(form0)
   const [publishers, setPublishers] = useState([])
@@ -145,7 +146,12 @@ export default function Books() {
     }
   }
 
-  function toast2(msg, type='success') { setToast({msg,type}); setTimeout(()=>setToast(null),3000) }
+  function toast2(msg, type='success') {
+    setToast({msg,type})
+    // The timer of the message before must not clear this one.
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(()=>setToast(null),3000)
+  }
   function openAdd() { setForm(form0); setModal('add') }
   function openEdit(b) { setForm({...b, price: hasNoAmount(b) ? '' : b.price}); setSel(b); setModal('edit') }
   const missingAmountBooks = books.filter(hasNoAmount)
