@@ -87,6 +87,8 @@ setBookAmounts: (updates) => ipcRenderer.invoke('books-set-amounts', updates),
   clearRestoreReport: () => ipcRenderer.invoke('backup-clear-report'),
   recoverAmounts: () => ipcRenderer.invoke('backup-recover-amounts'),
   recoverAmountsFromFile: () => ipcRenderer.invoke('backup-recover-amounts-from-file'),
+  exportMissingAmounts: () => ipcRenderer.invoke('books-export-missing-amounts'),
+  getVersion: () => ipcRenderer.invoke('app-version'),
 
   // File / Media
   pickImage: () => ipcRenderer.invoke('pick-image'),

@@ -360,6 +360,29 @@ ipcMain.handle('backup-get-path', () => db.getBackupPath())
 ipcMain.handle('backup-get-report', () => db.getRestoreReport())
 ipcMain.handle('backup-clear-report', () => { db.clearRestoreReport(); return { success: true } })
 
+// The version of the app, so that the librarian can say which build is on
+// the computer. It is shown at the bottom of the side bar.
+ipcMain.handle('app-version', () => app.getVersion())
+
+// Write the books that have no amount into a list the librarian can fill in.
+// The list is read back with "Take the amounts from another file", so the
+// amounts can come from a spreadsheet when they are in no file of the
+// software.
+ipcMain.handle('books-export-missing-amounts', async () => {
+  const books = db.listBooksWithoutAmount()
+  if (!books.length) {
+    return { success: false, message: 'Every book has an amount already.' }
+  }
+  const stamp = new Date().toISOString().slice(0, 10)
+  const { filePath } = await dialog.showSaveDialog(mainWindow, {
+    title: 'Export the books without an amount',
+    defaultPath: path.join(app.getPath('documents'), `kooroppada-amounts-${stamp}.csv`),
+    filters: [{ name: 'Price list', extensions: ['csv'] }],
+  })
+  if (!filePath) return { success: false, message: 'cancelled' }
+  return db.writeAmountList(filePath)
+})
+
 // Look for the amounts of the books that have none and write them in.
 // The librarian does not have to restore a backup to get the amounts back.
 ipcMain.handle('backup-recover-amounts', async () => {

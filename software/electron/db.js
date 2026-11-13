@@ -469,6 +469,9 @@ function splitListRow(line) {
   for (let i = 0; i < line.length; i++) {
     const char = line[i]
     if (char === '"') {
+      // A quote inside a quoted cell is written twice, the way a
+      // spreadsheet writes it.
+      if (quoted && line[i + 1] === '"') { cell += '"'; i++; continue }
       quoted = !quoted
       continue
     }
@@ -1476,6 +1479,70 @@ module.exports.setBookAmounts = (updates) => {
   if (updated > 0) performAutoBackup()
   return { success: true, updated }
 }
+
+/**
+ * The books that have no amount, in the order of the library.
+ *
+ * The list is what the librarian fills in when the amount of a book is in
+ * no file of the software: it is written as a price list, filled in, and
+ * read back with "Take the amounts from another file".
+ *
+ * @returns {Array<{ id: number, isbn: string|null, title: string, title_ml: string|null, author: string|null }>}
+ */
+module.exports.listBooksWithoutAmount = () =>
+  db
+    .prepare('SELECT id, isbn, title, title_ml, author FROM books WHERE price IS NULL ORDER BY id')
+    .all()
+
+/**
+ * One cell of a price list.
+ *
+ * A cell that holds a comma, a quote or a line break is put in quotes, and
+ * a quote inside it is written twice - the way a spreadsheet writes it.
+ *
+ * @param {string} value
+ * @returns {string}
+ */
+function csvCell(value) {
+  const text = String(value ?? '')
+  if (!/["\r\n,]/.test(text)) return text
+  return '"' + text.replace(/"/g, '""') + '"'
+}
+
+/**
+ * Write the books that have no amount into a price list.
+ *
+ * The list is read back by `buildAmountIndexFromList()`, so a list that is
+ * filled in and given back is written into the books.
+ *
+ * @param {string} targetPath where the list is written
+ * @returns {{ success: boolean, path?: string, books?: number, message?: string }}
+ */
+function writeAmountList(targetPath) {
+  try {
+    const books = module.exports.listBooksWithoutAmount()
+    if (!books.length) {
+      return { success: false, message: 'Every book has an amount already.' }
+    }
+    const lines = ['ISBN,Title,Author,Amount']
+    for (const book of books) {
+      lines.push([
+        csvCell(book.isbn || ''),
+        csvCell(book.title || ''),
+        csvCell(book.author || ''),
+        '',
+      ].join(','))
+    }
+    // A byte order mark, so that a spreadsheet opens the Malayalam titles
+    // the way they are written.
+    fs.writeFileSync(targetPath, '\uFEFF' + lines.join('\r\n') + '\r\n', 'utf8')
+    return { success: true, path: targetPath, books: books.length }
+  } catch (err) {
+    console.error('Writing the price list failed:', err)
+    return { success: false, message: err.message }
+  }
+}
+module.exports.writeAmountList = writeAmountList
 module.exports.deleteBook = (id) => {
   const active = db.prepare("SELECT COUNT(*) as c FROM borrowings WHERE book_id=? AND status='Issued'").get(id)
   if (active.c > 0) return { success: false, message: 'Book is currently issued. Please return it before deleting.' }
