@@ -67,6 +67,30 @@ function hasNoAmount(book) {
   return !book || book.price === '' || book.price == null
 }
 
+/**
+ * The amount the librarian typed.
+ *
+ * The field is a plain text field, so that the number can be written the
+ * way it is read - "250" or "250.50" - without the browser stepping through
+ * the values or refusing the number it does not like.
+ *
+ * @param {string} value what is in the field
+ * @returns {number|null} the amount, `null` when the field is empty, and
+ *   `NaN` when what is in the field is not an amount
+ */
+function parseAmount(value) {
+  const text = String(value ?? '').trim()
+  if (text === '') return null
+  // A trailing dot is what the field holds while "250." is being typed.
+  const cleaned = text.endsWith('.') ? text.slice(0, -1) : text
+  // Only digits and one dot. Anything else is a mistake, and it must never
+  // become the amount 0 of a free book.
+  if (!/^\d+(\.\d+)?$/.test(cleaned)) return NaN
+  const amount = Number(cleaned)
+  if (!Number.isFinite(amount) || amount < 0) return NaN
+  return Math.round(amount * 100) / 100
+}
+
 export default function Books() {
   const context = useSettings()
   const { language } = context || {}
@@ -198,20 +222,33 @@ export default function Books() {
   }
 
   async function saveAmounts() {
-    const updates = amountTargets
-      .filter(b => amountEdits[b.id] !== '' && amountEdits[b.id] != null)
-      .map(b => ({ id: b.id, price: Number(amountEdits[b.id]) }))
-    if (updates.length === 0) { setModal(null); return }
-    if (updates.some(u => !Number.isFinite(u.price) || u.price < 0)) {
-      toast2('Enter a valid amount for every filled row', 'error')
-      return
+    const filled = amountTargets.filter(b => amountEdits[b.id] !== '' && amountEdits[b.id] != null)
+    const updates = []
+    for (const book of filled) {
+      const price = parseAmount(amountEdits[book.id])
+      if (price === null || Number.isNaN(price)) {
+        toast2('Enter a valid amount for every filled row', 'error')
+        return
+      }
+      updates.push({ id: book.id, price })
     }
+    if (updates.length === 0) { setModal(null); return }
     const res = await window.api.setBookAmounts(updates)
     if (res && res.success) {
       toast2(`Amount saved for ${res.updated} book${res.updated === 1 ? '' : 's'}`)
       setModal(null)
       load()
     } else toast2((res && res.message) || 'Could not save amounts', 'error')
+  }
+
+  // Write the books that have no amount into a list the librarian can fill
+  // in, so that the amounts can come from a spreadsheet when they are in no
+  // file of the software.
+  async function handleExportMissingAmounts() {
+    const res = await window.api.exportMissingAmounts()
+    if (!res) return
+    if (res.success) toast2(`${res.books} book(s) written to ${res.path}`, 'success')
+    else if (res.message && res.message !== 'cancelled') toast2(res.message, 'error')
   }
 
   async function openQr(b) {
@@ -644,8 +681,15 @@ export default function Books() {
       }
     }
 
-    const price = form.price === '' || form.price == null ? null : Math.max(0, Number(form.price) || 0)
-    const payload = { ...form, price }
+    // The amount is written the way it is read. A field that does not hold a
+    // number is a mistake, and it must never become the amount 0 of a free
+    // book - so it is refused here, with a word about it.
+    const amount = parseAmount(form.price)
+    if (Number.isNaN(amount)) {
+      toast2('The amount must be a number, 0 or more', 'error')
+      return
+    }
+    const payload = { ...form, price: amount }
     const res = modal==='add' ? await window.api.addBook(payload) : await window.api.updateBook(selected.id,payload)
     if (res.success) { 
       toast2(modal==='add'?'Book added!':'Book updated!')
@@ -709,14 +753,20 @@ export default function Books() {
               <span className="lang-ml">{books.length} പുസ്തകങ്ങളിൽ {missingAmountBooks.length} പുസ്തകങ്ങളുടെ വില രേഖപ്പെടുത്തിയിട്ടില്ല</span>
             </div>
             <div className="td-muted" style={{fontSize:12}}>
-              <span className="lang-en">The amount of these books is not on record. When a backup is restored, the amounts are looked up in your library and in your automatic backups and written back into the books - the books listed here are the ones that were nowhere to be found. If the amounts are in another file, use <strong> Find the amounts again </strong> in <strong> Settings → Backup </strong>. Otherwise type each amount once; it is saved right away and every backup from now on holds it.</span>
-              <span className="lang-ml">ഈ പുസ്തകങ്ങളുടെ വില രേഖപ്പെടുത്തിയിട്ടില്ല. ബാക്കപ്പ് തിരിക്കുമ്പോൾ നിങ്ങളുടെ ലൈബ്രറിയിലും ഓട്ടോമാറ്റിക് ബാക്കപ്പുകളിലും വിലകൾ തിരിക്കിയെടുത്ത് പുസ്തകങ്ങളിലേക്ക് എഴുത്തുക - ഇവിടെ കാണിക്കുന്നവാണ് എവിടെയും കണ്ടെത്തിയാത്തവ. വിലകൾ മറ്റൊരു ഫയലിൽ ഉണ്ടെങ്കിൽ <strong> Settings → Backup </strong> വിലെ <strong> വിലകൾ വീണ്ടും കണ്ടെത്തുക </strong> എന്നത് ഉപയോഗിക്കുക. അല്ലെങ്കിൽ ഓരോ വിലയും ഒരിക്കൽ നൽകുക; അത് ഉടൻ സേവ് ആകും, അതിനു ശേഷമുള്ള എല്ലാ ബാക്കപ്പുകളിലും ഉണ്ടാകും.</span>
+              <span className="lang-en">The amount of these books is not on record. When a backup is restored, the amounts are looked up in your library and in your automatic backups and written back into the books - the books listed here are the ones that were nowhere to be found. If the amounts are in another file, use <strong> Find the amounts again </strong> in <strong> Settings → Backup </strong>. Otherwise type each amount once; it is saved right away and every backup from now on holds it. If you keep the prices in a spreadsheet, use <strong> Export the missing amounts </strong> to get a list of these books, fill in the Amount column, and give the file back with <strong> Take the amounts from another file </strong>.</span>
+              <span className="lang-ml">ഈ പുസ്തകങ്ങളുടെ വില രേഖപ്പെടുത്തിയിട്ടില്ല. ബാക്കപ്പ് തിരിക്കുമ്പോൾ നിങ്ങളുടെ ലൈബ്രറിയിലും ഓട്ടോമാറ്റിക് ബാക്കപ്പുകളിലും വിലകൾ തിരിക്കിയെടുത്ത് പുസ്തകങ്ങളിലേക്ക് എഴുത്തുക - ഇവിടെ കാണിക്കുന്നവാണ് എവിടെയും കണ്ടെത്തിയാത്തവ. വിലകൾ മറ്റൊരു ഫയലിൽ ഉണ്ടെങ്കിൽ <strong> Settings → Backup </strong> വിലെ <strong> വിലകൾ വീണ്ടും കണ്ടെത്തുക </strong> എന്നത് ഉപയോഗിക്കുക. അല്ലെങ്കിൽ ഓരോ വിലയും ഒരിക്കൽ നൽകുക; അത് ഉടൻ സേവ് ആകും, അതിനു ശേഷമുള്ള എല്ലാ ബാക്കപ്പുകളിലും ഉണ്ടാകും. വിലകൾ ഒരു ഷീറ്റിലുള്ളില്‍ സൂക്ഷിക്കുകന്‍നാല്‍ <strong> വിലയില്ലാത്ത പുസ്തകങ്ങള്‍ പുറത്തേക്ക് </strong> എന്നതുപോലെ പുസ്തകങ്ങളുടെ പട്ടിക എടുത്ത്, Amount കുഴില്‍ വില പറഞ്ഞ്, അതേ ഫയല്‍ <strong> മറ്റൊരു ഫയലില്‍ നിന്ന് വിലകള്‍ എടുക്കുക </strong> എന്നതിലൂടെ തിരികെ കൊടുക്കുക.</span>
             </div>
           </div>
-          <button className="btn btn--primary" onClick={()=>openAmountEditor(missingAmountBooks)}>
-            <span className="lang-en">Set amounts</span>
-            <span className="lang-ml">വില നൽകുക</span>
-          </button>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            <button className="btn btn--primary" onClick={()=>openAmountEditor(missingAmountBooks)}>
+              <span className="lang-en">Set amounts</span>
+              <span className="lang-ml">വില നൽകുക</span>
+            </button>
+            <button className="btn" onClick={handleExportMissingAmounts}>
+              <span className="lang-en">Export the missing amounts</span>
+              <span className="lang-ml">വിലയില്ലാത്ത പുസ്തകങ്ങള്‍ പുറത്തേക്ക്</span>
+            </button>
+          </div>
         </div>
       )}
 
@@ -880,7 +930,17 @@ export default function Books() {
                 <div className="form-group"><label className="form-label">Condition</label><select className="form-select" name="condition" value={form.condition||'Good'} onChange={hc}>{CONDITIONS.map(c=><option key={c}>{c}</option>)}</select></div>
                 <div className="form-group">
                   <label className="form-label">Amount (₹)</label>
-                  <input className="form-input" type="number" inputMode="decimal" min="0" step="0.01" name="price" value={form.price??''} onChange={hc} placeholder="Enter amount"/>
+                  <input
+                    className="form-input"
+                    type="text"
+                    inputMode="decimal"
+                    name="price"
+                    value={form.price??''}
+                    onChange={hc}
+                    placeholder="Enter amount"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
                   <div className="td-muted" style={{fontSize:11, marginTop:4}}>Optional. Leave blank when the amount is not known; type 0 for a free copy.</div>
                 </div>
 
@@ -975,10 +1035,8 @@ export default function Books() {
                       <input
                         id={`amt-${b.id}`}
                         className="form-input"
-                        type="number"
+                        type="text"
                         inputMode="decimal"
-                        min="0"
-                        step="0.01"
                         autoFocus={i === 0 && !amountFilter}
                         placeholder={onRecord ? (Number(amountSaved[b.id]) === 0 ? 'Free' : String(amountSaved[b.id])) : 'Amount'}
                         value={amountEdits[b.id] ?? ''}
@@ -988,8 +1046,8 @@ export default function Books() {
                           // session cannot lose the work.
                           const raw = e.target.value
                           if (raw === '' || raw == null) return
-                          const value = Number(raw)
-                          if (!Number.isFinite(value) || value < 0) return
+                          const value = parseAmount(raw)
+                          if (value === null || Number.isNaN(value)) return
                           await saveOneAmount(b, value)
                         }}
                         onKeyDown={async e=>{
@@ -997,8 +1055,8 @@ export default function Books() {
                           e.preventDefault()
                           const raw = amountEdits[b.id]
                           if (raw !== '' && raw != null) {
-                            const value = Number(raw)
-                            if (!Number.isFinite(value) || value < 0) {
+                            const value = parseAmount(raw)
+                            if (value === null || Number.isNaN(value)) {
                               toast2('Enter a valid amount', 'error')
                               return
                             }

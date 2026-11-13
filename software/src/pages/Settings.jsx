@@ -183,6 +183,21 @@ export default function Settings() {
     }
   }
 
+  // Write the books that have no amount into a list the librarian can fill
+  // in, so that the amounts can come from a spreadsheet.
+  async function handleExportMissingAmounts() {
+    try {
+      const res = await window.api.exportMissingAmounts()
+      if (!res) return
+      if (res.message === 'cancelled') return
+      if (!res.success) { toast2(res.message, 'error'); return }
+      toast2(`${res.books} book(s) written to ${res.path}`, 'success')
+    } catch (err) {
+      console.error(err)
+      toast2('Writing the list failed', 'error')
+    }
+  }
+
   async function addUser() {
     if (!newUser.username || !newUser.password || !newUser.full_name) { toast2('Fill all user fields','error'); return }
     const res = await window.api.addUser(newUser)
@@ -693,6 +708,11 @@ export default function Settings() {
               library backup (<code>.db</code>) or a price list exported from a spreadsheet
               (<code>.csv</code>, <code>.txt</code>). A price list is one book per line, with the ISBN or the
               title of the book and its amount.
+              <br/><br/>
+              When the amounts are in no file at all, <strong> Export the books without an amount </strong>
+              writes a list of the books that have none. Fill in the Amount column of that list in a
+              spreadsheet, and give the file back with <strong> Take the amounts from another file </strong> -
+              the amounts are then written into the books.
             </p>
             <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
               <button className="btn btn--primary" disabled={amountBusy} onClick={() => handleRecoverAmounts(false)}>
@@ -700,6 +720,9 @@ export default function Settings() {
               </button>
               <button className="btn" disabled={amountBusy} onClick={() => handleRecoverAmounts(true)}>
                 <Upload size={15}/> Take the amounts from another file
+              </button>
+              <button className="btn" disabled={amountBusy} onClick={handleExportMissingAmounts}>
+                <Download size={15}/> Export the books without an amount
               </button>
             </div>
 
@@ -729,6 +752,14 @@ export default function Settings() {
                 <div className="td-muted" style={{marginTop:6}}>
                   {amountReport.filesLookedAt} place{amountReport.filesLookedAt === 1 ? '' : 's'} were looked at: this library and the automatic backups.
                 </div>
+                {amountReport.recovered === 0 && amountReport.missing > 0 && (
+                  <div className="td-muted" style={{marginTop:6}}>
+                    The amount of these books was never entered and is in no file on this computer. Write the
+                    list with <strong> Export the books without an amount </strong>, fill in the Amount column
+                    of the list in a spreadsheet, and give the file back with
+                    <strong> Take the amounts from another file </strong>.
+                  </div>
+                )}
               </div>
             )}
           </div>
